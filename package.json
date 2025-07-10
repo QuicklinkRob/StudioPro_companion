@@ -1,0 +1,30 @@
+{
+  "name": "ql-studiopro",
+  "version": "3.5.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "format": "prettier -w ."
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@companion-module/base": "~1.8.0",
+    "ads1115": "^1.2.0",
+    "i2c-bus": "^5.2.3",
+    "obs-websocket-js": "5.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quicklink-Video-Over-IP-Solutions/StudioPro.git"
+  },
+  "devDependencies": {
+    "@companion-module/tools": "^1.5.0"
+  },
+  "prettier": "@companion-module/tools/.prettierrc.json",
+  "description": "This module will allow you to control StudioPro using the built-in websocket plugin.",
+  "bugs": {
+    "url": "https://github.com/Quicklink-Video-Over-IP-Solutions/StudioPro/issues"
+  },
+  "homepage": "https://github.com/Quicklink-Video-Over-IP-Solutions/StudioPro#readme",
+  "author": ""
+}

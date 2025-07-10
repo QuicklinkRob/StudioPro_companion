@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+/pkg
+/pkg.tgz
+companion-module-studiopro/manifest.json
+.env
+.env.local
