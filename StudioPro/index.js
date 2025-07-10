@@ -163,58 +163,55 @@ class CRE8Instance extends InstanceBase {
 	}
 
 	// Audio Control Settings Persistence
-	// saveAudioControlSettings() {
-	// 	try {
-	// 		const settings = {
-	// 			audio_control_source_1: this.getVariableValue('audio_control_source_1') || '',
-	// 			audio_control_source_2: this.getVariableValue('audio_control_source_2') || '',
-	// 			audio_control_source_3: this.getVariableValue('audio_control_source_3') || '',
-	// 			audio_control_source_4: this.getVariableValue('audio_control_source_4') || '',
-	// 			audio_control_type_1: this.getVariableValue('audio_control_type_1') || 0,
-	// 			audio_control_type_2: this.getVariableValue('audio_control_type_2') || 0,
-	// 			audio_control_type_3: this.getVariableValue('audio_control_type_3') || 0,
-	// 			audio_control_type_4: this.getVariableValue('audio_control_type_4') || 0,
-	// 			ip_1: this.getVariableValue('ip_1') || '',
-	// 			ip_2: this.getVariableValue('ip_2') || '',
-	// 			ip_3: this.getVariableValue('ip_3') || '',
-	// 			ip_4: this.getVariableValue('ip_4') || '',
-	// 		}
+	saveAudioControlSettings() {
+		try {
+			const settings = {
+				audio_control_source_1: this.getVariableValue('audio_control_source_1') || '',
+				audio_control_source_2: this.getVariableValue('audio_control_source_2') || '',
+				audio_control_source_3: this.getVariableValue('audio_control_source_3') || '',
+				audio_control_source_4: this.getVariableValue('audio_control_source_4') || '',
+				audio_control_type_1: this.getVariableValue('audio_control_type_1') || 0,
+				audio_control_type_2: this.getVariableValue('audio_control_type_2') || 0,
+				audio_control_type_3: this.getVariableValue('audio_control_type_3') || 0,
+				audio_control_type_4: this.getVariableValue('audio_control_type_4') || 0,
+				ip_1: this.getVariableValue('ip_1') || '',
+				ip_2: this.getVariableValue('ip_2') || '',
+				ip_3: this.getVariableValue('ip_3') || '',
+				ip_4: this.getVariableValue('ip_4') || '',
+			}
 			
-	// 		// Only save if we have settings to save
-	// 		if (Object.values(settings).some(val => val !== '' && val !== 0)) {
-	// 			// Save to vendor (if supported - will fail silently if not)
-	// 			this.sendRequest('CallVendorRequest', {
-	// 				vendorName: "cre8-app-main-controls",
-	// 				requestType: 'save_audio_control_settings',
-	// 				requestData: settings
-	// 			}).catch(error => {
-	// 				// Vendor doesn't support this yet - that's OK
-	// 				this.log('debug', 'Audio control settings vendor save not supported yet')
-	// 			})
-	// 		}
-	// 	} catch (error) {
-	// 		this.log('debug', `Audio control settings save skipped: ${error.message}`)
-	// 	}
-	// }
+			// Only save if we have settings to save
+			if (Object.values(settings).some(val => val !== '' && val !== 0)) {
+				this.setData('audioControlSettings', settings)
+					.catch(error => {
+						this.log('warn', `Failed to save audio control settings: ${error.message}`)
+					})
+			}
+		} catch (error) {
+			this.log('error', `Error saving audio control settings: ${error.message}`)
+		}
+	}
 
-	// async loadAudioControlSettings() {
-	// 	try {
-	// 		const response = await this.sendRequest('CallVendorRequest', {
-	// 			vendorName: "cre8-app-main-controls",
-	// 			requestType: 'load_audio_control_settings',
-	// 			requestData: { request: 'load' } // Provide non-empty requestData
-	// 		})
+	async loadAudioControlSettings() {
+		try {
+			const settings = await this.getData('audioControlSettings')
 			
-	// 		if (response?.responseData?.success && response.responseData.settings) {
-	// 			this.log('debug', 'Audio control settings loaded from vendor successfully')
-	// 			return response.responseData.settings
-	// 		}
-	// 	} catch (error) {
-	// 		// Vendor doesn't support this yet - that's OK, use defaults
-	// 		this.log('debug', 'Audio control settings vendor load not supported yet, using defaults')
-	// 	}
-	// 	return null
-	// }
+			if (settings) {
+				// Update all the variables with the loaded settings
+				Object.entries(settings).forEach(([key, value]) => {
+					this.setVariableValues({ [key]: value })
+				})
+				
+				this.log('debug', 'Audio control settings loaded successfully')
+				return settings
+			}
+		} catch (error) {
+			this.log('warn', `Failed to load audio control settings: ${error.message}`)
+		}
+		
+		// Return null if no settings found or error occurred
+		return null
+	}
 
 	initializeStates() {
 		//Basic Info
@@ -432,9 +429,20 @@ class CRE8Instance extends InstanceBase {
 					this.buildSpecialInputs()
 					this.buildSceneList()
 					this.buildDSKTabs()
+
+					// Load saved audio control settings after everything is initialized
+					try {
+						const savedSettings = await this.loadAudioControlSettings()
+						if (savedSettings) {
+							this.log('debug', 'Applying saved audio control settings after connection')
+							this.setVariableValues(savedSettings)
+						}
+					} catch (error) {
+						this.log('warn', `Failed to load audio control settings after connection: ${error.message}`)
+					}
 				}
 			}
-		} catch (error) {
+		} catch (error) { 
 			this.processWebsocketError(error)
 		}
 		// this.tbar();
@@ -1121,38 +1129,6 @@ class CRE8Instance extends InstanceBase {
 		this.setVariableValues({ profile: this.states.currentProfile })
 		this.updateActionsFeedbacksVariables()
 	}
-
-	// updateSceneChoices() {
-	// 	this.log('debug', 'Updating scene choices');
-	// 	this.cre8.sendRequest('GetSceneList').then((response) => {
-	// 		if (response && response.scenes) {
-	// 			// Create scene choices from the response
-	// 			this.sceneChoices = response.scenes.map(scene => ({
-	// 				id: scene.sceneName,
-	// 				label: scene.sceneName
-	// 			}));
-
-	// 			// Create the custom scene choices with the variable at the top
-	// 			this.sceneChoicesCustomScene = [
-	// 				{ id: '$(studio:scene_preview)', label: 'Current Preview Scene (Variable)' },
-	// 				{ id: 'customSceneName', label: '<CUSTOM SCENE NAME>' },
-	// 				...this.sceneChoices
-	// 			];
-
-	// 			// Set the default value to the variable
-	// 			this.sceneListDefault = '$(studio:scene_preview)';
-
-	// 			// Update action and feedback definitions
-	// 			this.setActionDefinitions(this.getActionDefinitions());
-	// 			this.setFeedbackDefinitions(this.getFeedbackDefinitions());
-
-	// 			this.log('debug', `Updated scene choices with ${this.sceneChoices.length} scenes`);
-	// 			this.log('debug', `Default scene is now: ${this.sceneListDefault}`);
-	// 		}
-	// 	}).catch(error => {
-	// 		this.log('error', `Failed to update scene choices: ${error.message}`);
-	// 	});
-	// }
 
 	async buildSceneCollectionList() {
 		let collections = await this.sendRequest('GetSceneCollectionList')

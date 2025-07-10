@@ -106,18 +106,7 @@ export function getVariables() {
 		dsk_display: '',
 		active_dsk_tab: '1', // Default to tab 1
 		current_media_button_text: 'Play', // Default to Play
-
 	})
-	
-	// Load saved settings asynchronously after initialization
-	// this.loadAudioControlSettings().then(savedSettings => {
-	// 	if (savedSettings) {
-	// 		this.log('debug', 'Applying saved audio control settings')
-	// 		this.setVariableValues(savedSettings)
-	// 	}
-	// }).catch(error => {
-	// 	this.log('debug', 'Using default audio control settings')
-	// })
 
 	//Source Specific Variables
 	for (let s in this.sources) {
