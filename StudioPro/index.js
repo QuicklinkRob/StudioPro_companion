@@ -170,23 +170,35 @@ class CRE8Instance extends InstanceBase {
 				audio_control_source_2: this.getVariableValue('audio_control_source_2') || '',
 				audio_control_source_3: this.getVariableValue('audio_control_source_3') || '',
 				audio_control_source_4: this.getVariableValue('audio_control_source_4') || '',
-				audio_control_type_1: this.getVariableValue('audio_control_type_1') || 0,
-				audio_control_type_2: this.getVariableValue('audio_control_type_2') || 0,
-				audio_control_type_3: this.getVariableValue('audio_control_type_3') || 0,
-				audio_control_type_4: this.getVariableValue('audio_control_type_4') || 0,
+				audio_control_type_1: this.getVariableValue('audio_control_type_1') ?? 0,
+				audio_control_type_2: this.getVariableValue('audio_control_type_2') ?? 0,
+				audio_control_type_3: this.getVariableValue('audio_control_type_3') ?? 0,
+				audio_control_type_4: this.getVariableValue('audio_control_type_4') ?? 0,
 				ip_1: this.getVariableValue('ip_1') || '',
 				ip_2: this.getVariableValue('ip_2') || '',
 				ip_3: this.getVariableValue('ip_3') || '',
 				ip_4: this.getVariableValue('ip_4') || '',
 			}
 			
-			// Only save if we have settings to save
-			if (Object.values(settings).some(val => val !== '' && val !== 0)) {
-				this.setData('audioControlSettings', settings)
-					.catch(error => {
-						this.log('warn', `Failed to save audio control settings: ${error.message}`)
-					})
-			}
+			this.log('debug', 'Saving audio control settings:', settings)
+			
+			// Save settings regardless of their values to ensure persistence
+			this.setData('audioControlSettings', settings)
+				.catch(error => {
+					this.log('warn', `Failed to save audio control settings: ${error.message}`)
+				})
+
+			// Also try to save to vendor if available
+			this.sendRequest('CallVendorRequest', {
+				vendorName: "cre8-app-main-controls",
+				requestType: 'save_audio_control_settings',
+				requestData: settings
+			}).then(response => {
+				this.log('debug', 'Audio control settings saved to vendor successfully:', response)
+			}).catch(error => {
+				// Vendor doesn't support this yet - that's OK
+				this.log('debug', 'Audio control settings vendor save not supported yet:', error.message)
+			})
 		} catch (error) {
 			this.log('error', `Error saving audio control settings: ${error.message}`)
 		}
@@ -260,6 +272,23 @@ class CRE8Instance extends InstanceBase {
 		//Set Initial States
 		this.vendorEvent = {}
 		this.states.sceneCollectionChanging = false
+
+		// Initialize audio control variables with default values
+		const defaultAudioSettings = {
+			audio_control_source_1: '',
+			audio_control_source_2: '',
+			audio_control_source_3: '',
+			audio_control_source_4: '',
+			audio_control_type_1: 0,
+			audio_control_type_2: 0,
+			audio_control_type_3: 0,
+			audio_control_type_4: 0,
+			ip_1: '',
+			ip_2: '',
+			ip_3: '',
+			ip_4: ''
+		}
+		this.setVariableValues(defaultAudioSettings)
 
 		console.log('Initializing mix states')
 		this.states.mix1Scene = 'None'
@@ -407,6 +436,17 @@ class CRE8Instance extends InstanceBase {
 				//Setup Initial State Objects
 				this.initializeStates()
 
+				// Load saved audio control settings before other initializations
+				try {
+					const savedSettings = await this.loadAudioControlSettings()
+					if (savedSettings) {
+						this.log('debug', 'Applying saved audio control settings')
+						this.setVariableValues(savedSettings)
+					}
+				} catch (error) {
+					this.log('warn', `Failed to load audio control settings: ${error.message}`)
+				}
+
 				//Get Initial CRE8 Info
 				let initialInfo = await this.cre8Info()
 
@@ -429,24 +469,12 @@ class CRE8Instance extends InstanceBase {
 					this.buildSpecialInputs()
 					this.buildSceneList()
 					this.buildDSKTabs()
-
-					// Load saved audio control settings after everything is initialized
-					try {
-						const savedSettings = await this.loadAudioControlSettings()
-						if (savedSettings) {
-							this.log('debug', 'Applying saved audio control settings after connection')
-							this.setVariableValues(savedSettings)
-						}
-					} catch (error) {
-						this.log('warn', `Failed to load audio control settings after connection: ${error.message}`)
-					}
 				}
 			}
-		} catch (error) { 
+		} catch (error) {
 			this.processWebsocketError(error)
 		}
 		// this.tbar();
-	
 	}
 
 	processWebsocketError(error) {
