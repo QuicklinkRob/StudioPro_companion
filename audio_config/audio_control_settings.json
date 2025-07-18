@@ -1,14 +1,14 @@
 {
-  "audio_control_source_1": "",
-  "audio_control_source_2": "",
+  "audio_control_source_1": "Video Capture Device",
+  "audio_control_source_2": "Desktop Audio",
   "audio_control_source_3": "",
   "audio_control_source_4": "",
   "audio_control_type_1": 0,
   "audio_control_type_2": 0,
   "audio_control_type_3": 0,
   "audio_control_type_4": 0,
-  "ip_1": 2,
-  "ip_2": "",
+  "ip_1": "",
+  "ip_2": 7,
   "ip_3": "",
   "ip_4": ""
 }
