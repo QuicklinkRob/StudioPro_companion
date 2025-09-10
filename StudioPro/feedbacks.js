@@ -872,6 +872,304 @@ export function getFeedbacks() {
 		},
 	}
 
+	// playlist feedbacks
+	feedbacks['playlist_loop_active'] = {
+		type: 'boolean',
+		name: 'Playlist Loop Active',
+		description: 'If playlist loop is enabled, change the style of the button',
+		defaultStyle: {
+			color: ColorBlack,
+			bgcolor: ColorOrange,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Source',
+				id: 'source',
+				default: this.mediaSourceList?.[0] ? this.mediaSourceList[0].id : '',
+				choices: this.mediaSourceList,
+			},
+		],
+		callback: (feedback) => {
+			const sourceName = feedback.options.source === 'currentMedia' ? this.states.currentMedia : feedback.options.source
+			const validName = this.sources[sourceName]?.validName ?? sourceName
+			return this.getVariableValue(`media_playlist_loop_state_${validName}`) === 'true'
+		},
+	}
+
+	feedbacks['item_loop_active'] = {
+		type: 'boolean',
+		name: 'Item Loop Active',
+		description: 'If current item loop is enabled, change the style of the button',
+		defaultStyle: {
+			color: ColorBlack,
+			bgcolor: ColorBlue,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Source',
+				id: 'source',
+				default: this.mediaSourceList?.[0] ? this.mediaSourceList[0].id : '',
+				choices: this.mediaSourceList,
+			},
+		],
+		callback: (feedback) => {
+			const sourceName = feedback.options.source === 'currentMedia' ? this.states.currentMedia : feedback.options.source
+			const validName = this.sources[sourceName]?.validName ?? sourceName
+			return this.getVariableValue(`media_loop_state_${validName}`) === 'true'
+		},
+	}
+
+	feedbacks['auto_advance_active'] = {
+		type: 'boolean',
+		name: 'Auto Advance Active',
+		description: 'If auto advance is enabled, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorQLGreen,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Source',
+				id: 'source',
+				default: this.mediaSourceList?.[0] ? this.mediaSourceList[0].id : '',
+				choices: this.mediaSourceList,
+			},
+		],
+		callback: (feedback) => {
+			const sourceName = feedback.options.source === 'currentMedia' ? this.states.currentMedia : feedback.options.source
+			const validName = this.sources[sourceName]?.validName ?? sourceName
+			return this.getVariableValue(`media_auto_advance_${validName}`) === 'true'
+		},
+	}
+
+	// Media Tab Feedbacks
+	feedbacks['media_tab_selected'] = {
+		type: 'boolean',
+		name: 'Media Tab Selected',
+		description: 'If this media tab is currently selected, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: 0x0066FF, // Blue when this tab is selected
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Tab',
+				id: 'mediaTab',
+				default: '1',
+				choices: [
+					{ id: '1', label: 'Media Tab 1' },
+					{ id: '2', label: 'Media Tab 2' },
+					{ id: '3', label: 'Media Tab 3' },
+					{ id: '4', label: 'Media Tab 4' },
+					{ id: '5', label: 'Media Tab 5' },
+				],
+			},
+		],
+		callback: (feedback) => {
+			const activeMediaTab = this.getVariableValue('active_media_tab') || '1';
+			const isSelected = activeMediaTab === feedback.options.mediaTab;
+			
+			// Only show feedback if tab is selected AND has a media source assigned
+			const mediaSource = this.getVariableValue(`media_tab_${feedback.options.mediaTab}_source`);
+			const hasMediaSource = mediaSource && mediaSource !== '';
+			
+			// console.log('Media Tab feedback debug for tab:', feedback.options.mediaTab);
+			// console.log('  activeMediaTab:', activeMediaTab);
+			// console.log('  isSelected:', isSelected);
+			// console.log('  mediaSource:', mediaSource);
+			// console.log('  hasMediaSource:', hasMediaSource);
+			// console.log('  result:', isSelected && hasMediaSource);
+			
+			// Temporarily return just selection to test
+			return isSelected; // Remove media source requirement for testing
+		},
+	}
+
+	feedbacks['media_tab_playing'] = {
+		type: 'boolean',
+		name: 'Media Tab Playing',
+		description: 'If media tab is playing, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorGreen,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Tab',
+				id: 'mediaTab',
+				default: '1',
+				choices: [
+					{ id: '1', label: 'Media Tab 1' },
+					{ id: '2', label: 'Media Tab 2' },
+					{ id: '3', label: 'Media Tab 3' },
+					{ id: '4', label: 'Media Tab 4' },
+					{ id: '5', label: 'Media Tab 5' },
+				],
+			},
+		],
+		callback: (feedback) => {
+			const mediaSourceName = this.getVariableValue(`media_tab_${feedback.options.mediaTab}_source`);
+			if (!mediaSourceName) return false;
+			
+			return this.mediaSources[mediaSourceName]?.mediaState == 'CRE8_MEDIA_STATE_PLAYING';
+		},
+	}
+
+	feedbacks['active_media_tab_playing'] = {
+		type: 'boolean',
+		name: 'Active Media Tab Playing',
+		description: 'If the currently active media tab is playing, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorGreen,
+		},
+		options: [],
+		callback: () => {
+			const activeTab = this.getVariableValue('active_media_tab') || '1';
+			const mediaSourceName = this.getVariableValue(`media_tab_${activeTab}_source`);
+			if (!mediaSourceName) return false;
+			
+			return this.mediaSources[mediaSourceName]?.mediaState == 'CRE8_MEDIA_STATE_PLAYING';
+		},
+	}
+
+	feedbacks['media_tab_paused_flash'] = {
+		type: 'advanced',
+		name: 'Media Tab Paused Flash',
+		description: 'Flash when media tab is paused',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Tab',
+				id: 'mediaTab',
+				default: '1',
+				choices: [
+					{ id: '1', label: 'Media Tab 1' },
+					{ id: '2', label: 'Media Tab 2' },
+					{ id: '3', label: 'Media Tab 3' },
+					{ id: '4', label: 'Media Tab 4' },
+					{ id: '5', label: 'Media Tab 5' },
+				],
+			},
+			{
+				type: 'colorpicker',
+				label: 'Flash Color',
+				id: 'flashColor',
+				default: ColorGreen,
+			},
+		],
+		callback: (feedback) => {
+			const mediaSourceName = this.getVariableValue(`media_tab_${feedback.options.mediaTab}_source`);
+			if (!mediaSourceName) return {};
+			
+			const mediaState = this.mediaSources[mediaSourceName]?.mediaState;
+			
+			if (mediaState === 'CRE8_MEDIA_STATE_PAUSED') {
+				// Simple time-based flash - no timers needed
+				const now = Date.now();
+				const flashOn = Math.floor(now / 500) % 2 === 0; // Flash every 500ms
+				
+				return flashOn ? 
+					{ color: ColorWhite, bgcolor: feedback.options.flashColor } : 
+					{};
+			}
+			
+			return {};
+		},
+	}
+
+	feedbacks['active_media_tab_paused_flash'] = {
+		type: 'advanced',
+		name: 'Active Media Tab Paused Flash',
+		description: 'Flash when the active media tab is paused',
+		options: [
+			{
+				type: 'colorpicker',
+				label: 'Flash Color',
+				id: 'flashColor',
+				default: ColorGreen,
+			},
+		],
+		callback: (feedback) => {
+			const activeTab = this.getVariableValue('active_media_tab') || '1';
+			const mediaSourceName = this.getVariableValue(`media_tab_${activeTab}_source`);
+			if (!mediaSourceName) return {};
+			
+			const mediaState = this.mediaSources[mediaSourceName]?.mediaState;
+			
+			if (mediaState === 'CRE8_MEDIA_STATE_PAUSED') {
+				// Simple time-based flash - no timers needed
+				const now = Date.now();
+				const flashOn = Math.floor(now / 500) % 2 === 0; // Flash every 500ms
+				
+				return flashOn ? 
+					{ color: ColorWhite, bgcolor: feedback.options.flashColor } : 
+					{};
+			}
+			
+			return {};
+		},
+	}
+
+	feedbacks['media_tab_status'] = {
+		type: 'advanced',
+		name: 'Media Tab Status Display',
+		description: 'Display media tab status with color coding',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media Tab',
+				id: 'mediaTab',
+				default: '1',
+				choices: [
+					{ id: '1', label: 'Media Tab 1' },
+					{ id: '2', label: 'Media Tab 2' },
+					{ id: '3', label: 'Media Tab 3' },
+					{ id: '4', label: 'Media Tab 4' },
+					{ id: '5', label: 'Media Tab 5' },
+				],
+			},
+		],
+		callback: (feedback) => {
+			const tabNumber = feedback.options.mediaTab;
+			const mediaSourceName = this.getVariableValue(`media_tab_${tabNumber}_source`);
+			const tabName = this.getVariableValue(`media_tab_${tabNumber}_name`) || `Tab ${tabNumber}`;
+			
+			if (!mediaSourceName) {
+				return { 
+					text: `${tabName}: No Source`,
+					color: ColorGray 
+				};
+			}
+
+			const mediaState = this.mediaSources[mediaSourceName]?.mediaState;
+			let status = 'Unknown';
+			let bgcolor = ColorGray;
+
+			if (mediaState === 'CRE8_MEDIA_STATE_PLAYING') {
+				status = 'Playing';
+				bgcolor = ColorGreen;
+			} else if (mediaState === 'CRE8_MEDIA_STATE_PAUSED') {
+				status = 'Paused';
+				bgcolor = ColorOrange;
+			} else if (mediaState === 'CRE8_MEDIA_STATE_STOPPED') {
+				status = 'Stopped';
+				bgcolor = ColorRed;
+			}
+
+			return {
+				text: `${tabName}: ${status}`,
+				color: ColorWhite,
+				bgcolor: bgcolor
+			};
+		},
+	}
+
 	feedbacks['studioMode'] = {
 		type: 'boolean',
 		name: 'Studio Mode Active',
@@ -1078,7 +1376,7 @@ export function getFeedbacks() {
 			
 			const sourceVarKeys = ['audio_control_type_1', 'audio_control_type_2', 'audio_control_type_3', 'audio_control_type_4'];
 			const value = this.getVariableValue(sourceVarKeys[feedback.options.source_index])
-			console.log('feedback ', feedback);
+			// console.log('feedback ', feedback);
 			if (value === 2) {
 				return { color: ColorWhite, bgcolor: ColorQLRed }
 			} else if (value === 1) {
@@ -1410,6 +1708,155 @@ export function getFeedbacks() {
 		callback: () => {
 			// Only show for quick cuts
 			return this.states.isQuickCut === true;
+		},
+	}
+
+	feedbacks['media_tab_previous_flash'] = {
+		type: 'boolean',
+		name: 'Media Tab Previous Flash',
+		description: 'Shows a brief flash when previous track is triggered',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorBlue,
+		},
+		options: [],
+		callback: () => {
+			return this.states.mediaTabPreviousFlash === true;
+		},
+	}
+
+	feedbacks['media_tab_stop_flash'] = {
+		type: 'boolean',
+		name: 'Media Tab Stop Flash',
+		description: 'Shows a brief flash when stop is triggered',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorRed,
+		},
+		options: [],
+		callback: () => {
+			return this.states.mediaTabStopFlash === true;
+		},
+	}
+
+	feedbacks['media_tab_next_flash'] = {
+		type: 'boolean',
+		name: 'Media Tab Next Flash',
+		description: 'Shows a brief flash when next track is triggered',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorBlue,
+		},
+		options: [],
+		callback: () => {
+			return this.states.mediaTabNextFlash === true;
+		},
+	}
+
+	feedbacks['media_tab_loop_flash'] = {
+		type: 'boolean',
+		name: 'Media Tab Loop Flash',
+		description: 'Shows a brief flash when loop is toggled',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorOrange,
+		},
+		options: [],
+		callback: () => {
+			return this.states.mediaTabLoopFlash === true;
+		},
+	}
+
+	feedbacks['active_media_tab_track_loop'] = {
+		type: 'boolean',
+		name: 'Active Media Tab - Track Loop',
+		description: 'If track loop is enabled for the currently selected media tab, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorBlue,
+		},
+		options: [],
+		callback: () => {
+			const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
+			const mediaSourceName = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+			
+			if (!mediaSourceName) {
+				return false
+			}
+			
+			if (!this.sources[mediaSourceName]) {
+				return false
+			}
+			
+			const source = this.sources[mediaSourceName]
+			if (!source.inputKind || (source.inputKind !== 'ffmpeg_source' && source.inputKind !== 'vlc_source')) {
+				return false
+			}
+			
+			const validName = this.sources[mediaSourceName]?.validName ?? mediaSourceName
+			return this.getVariableValue(`media_loop_state_${validName}`) === 'true'
+		},
+	}
+
+	feedbacks['active_media_tab_playlist_loop'] = {
+		type: 'boolean',
+		name: 'Active Media Tab - Playlist Loop',
+		description: 'If playlist loop is enabled for the currently selected media tab, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorOrange,
+		},
+		options: [],
+		callback: () => {
+			// get the currently active media tab
+			const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
+			const mediaSourceName = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+			
+			if (!mediaSourceName) {
+				return false
+			}
+			
+			if (!this.sources[mediaSourceName]) {
+				return false
+			}
+			
+			const source = this.sources[mediaSourceName]
+			if (!source.inputKind || (source.inputKind !== 'ffmpeg_source' && source.inputKind !== 'vlc_source')) {
+				return false
+			}
+			
+			const validName = this.sources[mediaSourceName]?.validName ?? mediaSourceName
+			return this.getVariableValue(`media_playlist_loop_state_${validName}`) === 'true'
+		},
+	}
+
+	feedbacks['active_media_tab_playing'] = {
+		type: 'boolean',
+		name: 'Active Media Tab - Playing',
+		description: 'If media is currently playing for the active media tab, change the style of the button',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorGreen,
+		},
+		options: [],
+		callback: () => {
+			const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
+			const mediaSourceName = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+			
+			if (!mediaSourceName) {
+				return false
+			}
+			
+			if (!this.sources[mediaSourceName]) {
+				return false
+			}
+			
+			const source = this.sources[mediaSourceName]
+			if (!source.inputKind || (source.inputKind !== 'ffmpeg_source' && source.inputKind !== 'vlc_source')) {
+				return false
+			}
+			
+			return this.mediaSources[mediaSourceName]?.mediaState === 'CRE8_MEDIA_STATE_PLAYING'
 		},
 	}
 

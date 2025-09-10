@@ -55,11 +55,20 @@ export function getVariables() {
 	variables.push({ variableId: 'custom_scene_name', name: 'Custom Scene Name' })
 	variables.push({ variableId: 'dsk_display', name: 'DSK Display - Format: tab:item (e.g., "1:DSK 1")' })
 	variables.push({ variableId: 'active_dsk_tab', name: 'Currently Active DSK Tab (1-8)' })
+	variables.push({ variableId: 'active_media_tab', name: 'Currently Active Media Tab (1-5)' })
 	variables.push({ variableId: 'current_media_button_text', name: 'Current Media Button Text (Play/Pause)' })
 	
 	// T-Bar Variables
 	// variables.push({ variableId: 'tbar_position', name: 'T-Bar Position' })
 
+	// Register Media Tab variables for tabs 1-5
+	for (let i = 0; i < 5; i++) {
+		const tabNumber = i + 1;
+		variables.push({ 
+			variableId: `media_tab_${tabNumber}_source`, 
+			name: `Media Tab ${tabNumber} - Source Name` 
+		});
+	}
 	
 	// Register DSK name variables for tabs 1-8
 	for (let i = 0; i < 4; i++) {
@@ -125,7 +134,13 @@ export function getVariables() {
 		custom_scene_name: '',
 		dsk_display: '',
 		active_dsk_tab: '1', // Default to tab 1
+		active_media_tab: '1', // Default to media tab 1
 		current_media_button_text: 'Play', // Default to Play
+		media_tab_1_source: '',
+		media_tab_2_source: '',
+		media_tab_3_source: '',
+		media_tab_4_source: '',
+		media_tab_5_source: '',
 	})
 
 	//Source Specific Variables
@@ -157,9 +172,19 @@ export function getVariables() {
 						variableId: `media_time_remaining_${sourceName}`,
 						name: `${sourceName} - Time remaining`,
 					})
+					// enhanced playlist variables
+					variables.push({ variableId: `media_playlist_count_${sourceName}`, name: `${sourceName} - Playlist item count` })
+					variables.push({ variableId: `media_current_clip_index_${sourceName}`, name: `${sourceName} - Current clip index` })
+					variables.push({ variableId: `media_current_clip_name_${sourceName}`, name: `${sourceName} - Current clip name` })
+					variables.push({ variableId: `media_loop_state_${sourceName}`, name: `${sourceName} - Item loop state` })
+					variables.push({ variableId: `media_playlist_loop_state_${sourceName}`, name: `${sourceName} - Playlist loop state` })
+					variables.push({ variableId: `media_auto_advance_${sourceName}`, name: `${sourceName} - Auto advance state` })
+					
 					let file = ''
 					if (inputSettings?.playlist) {
-						file = inputSettings?.playlist[0]?.value?.match(/[^\\\/]+(?=\.[\w]+$)|[^\\\/]+$/)
+						// handle both 'value' and 'path' properties
+						const firstItem = inputSettings.playlist[0]
+						file = (firstItem?.path || firstItem?.value)?.match(/[^\\\/]+(?=\.[\w]+$)|[^\\\/]+$/)
 						//Use first value in playlist until support for determining currently playing cue
 					} else if (inputSettings?.local_file) {
 						file = inputSettings?.local_file?.match(/[^\\\/]+(?=\.[\w]+$)|[^\\\/]+$/)

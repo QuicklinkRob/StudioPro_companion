@@ -1,13 +1,13 @@
 {
-  "audio_control_source_1": "",
-  "audio_control_source_2": "",
+  "audio_control_source_1": "Mic/Aux",
+  "audio_control_source_2": "Media Source 2",
   "audio_control_source_3": "",
   "audio_control_source_4": "",
-  "audio_control_type_1": 0,
-  "audio_control_type_2": 0,
+  "audio_control_type_1": 2,
+  "audio_control_type_2": 1,
   "audio_control_type_3": 0,
   "audio_control_type_4": 0,
-  "ip_1": "",
+  "ip_1": 4,
   "ip_2": "",
   "ip_3": "",
   "ip_4": ""

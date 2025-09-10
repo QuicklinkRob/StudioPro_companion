@@ -78,6 +78,12 @@ class CRE8Instance extends InstanceBase {
 			this.log('error', `Failed to save audio control settings during destroy: ${error.message}`)
 		}
 		
+		// Clean up paused flash timer
+		if (this.pausedFlashTimer) {
+			clearInterval(this.pausedFlashTimer)
+			this.pausedFlashTimer = null
+		}
+		
 		this.disconnectCRE8()
 		this.stopReconnectionPoll()
 	}
@@ -347,6 +353,11 @@ class CRE8Instance extends InstanceBase {
 		this.imageSources = {}
 		this.textSources = {}
 		this.sourceFilters = {}
+		
+		// Timer for paused flash effect only - doesn't interfere with play/pause feedback
+		this.pausedFlashTimer = setInterval(() => {
+			this.checkFeedbacks('media_tab_paused_flash', 'active_media_tab_paused_flash')
+		}, 500)
 		//Choices
 		this.sceneChoices = []
 		this.sourceChoices = []
@@ -1094,12 +1105,19 @@ class CRE8Instance extends InstanceBase {
 			}
 		})
 		this.cre8.on('MediaInputActionTriggered', (data) => {
+			let name = this.sources[data.inputName]?.validName
+			if (!name) return
+			
 			if (data.mediaAction == 'CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE') {
-				let name = this.sources[data.inputName].validName
 				this.setVariableValues({ 
 					[`media_status_${name}`]: 'Paused',
 					current_media_button_text: 'Play', // Show "Play" when paused
 				})
+			} else if (data.mediaAction == 'CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_LOOP') {
+				// Loop action triggered - refresh media status to get updated loop state
+				setTimeout(() => {
+					this.getMediaStatus()
+				}, 100)
 			}
 		})
 		//UI
@@ -1642,20 +1660,21 @@ class CRE8Instance extends InstanceBase {
 			let sourceName = source.id
 			batch.push({
 				requestId: sourceName,
-				requestType: 'GetMediaInputStatus',
+				requestType: 'GetMediaPlayerInputStatus', 
 				requestData: { inputName: sourceName },
 			})
 		}
 
 		let data = await this.sendBatch(batch)
+		let fallbackBatch = []
 
 		if (data) {
 			for (const response of data) {
-				if (response.requestStatus.result) {
-					let sourceName = response.requestId
-					let validName = this.sources[sourceName].validName ?? sourceName
-					let data = response.responseData
+				let sourceName = response.requestId
+				let validName = this.sources[sourceName].validName ?? sourceName
 
+				if (response.requestStatus.result) {
+					let data = response.responseData
 					this.mediaSources[sourceName] = data
 
 					let remaining = data?.mediaDuration - data?.mediaCursor
@@ -1667,6 +1686,22 @@ class CRE8Instance extends InstanceBase {
 
 					this.mediaSources[sourceName].timeElapsed = this.formatTimecode(data.mediaCursor)
 					this.mediaSources[sourceName].timeRemaining = remaining
+
+					// enhanced playlist variables
+					if (data?.playlist && Array.isArray(data.playlist)) {
+						const playlistCount = data.playlist.length
+						const currentIndex = data.mediaCurrentIndex ?? 0
+						const currentClip = data.playlist[currentIndex]
+						
+						this.setVariableValues({
+							[`media_playlist_count_${validName}`]: playlistCount,
+							[`media_current_clip_index_${validName}`]: currentIndex,
+							[`media_current_clip_name_${validName}`]: currentClip?.displayName || currentClip?.path?.split(/[\\/]/).pop() || 'Unknown',
+							[`media_loop_state_${validName}`]: data.mediaLoop ? 'true' : 'false',
+							[`media_playlist_loop_state_${validName}`]: data.playlistLoop ? 'true' : 'false',
+							[`media_auto_advance_${validName}`]: data.autoAdvance ? 'true' : 'false',
+						})
+					}
 
 					if (data?.mediaState) {
 						switch (data?.mediaState) {
@@ -1690,8 +1725,102 @@ class CRE8Instance extends InstanceBase {
 						[`media_time_elapsed_${validName}`]: this.mediaSources[sourceName].timeElapsed,
 						[`media_time_remaining_${validName}`]: remaining,
 					})
-					this.checkFeedbacks('media_playing', 'media_source_time_remaining')
+					this.checkFeedbacks('media_playing', 'media_source_time_remaining', 'playlist_loop_active', 'item_loop_active', 'auto_advance_active')
+				} else {
+					// fallback to standard command if enhanced not available
+					fallbackBatch.push({
+						requestId: sourceName,
+						requestType: 'GetMediaInputStatus',
+						requestData: { inputName: sourceName },
+					})
 				}
+			}
+		}
+
+		// process fallback for standard media inputs
+		if (fallbackBatch.length > 0) {
+			let fallbackData = await this.sendBatch(fallbackBatch)
+			
+			if (fallbackData) {
+				for (const response of fallbackData) {
+					if (response.requestStatus.result) {
+						let sourceName = response.requestId
+						let validName = this.sources[sourceName].validName ?? sourceName
+						let data = response.responseData
+
+						this.mediaSources[sourceName] = data
+
+						let remaining = data?.mediaDuration - data?.mediaCursor
+						if (remaining > 0) {
+							remaining = this.formatTimecode(remaining)
+						} else {
+							remaining = '--:--:--'
+						}
+
+						this.mediaSources[sourceName].timeElapsed = this.formatTimecode(data.mediaCursor)
+						this.mediaSources[sourceName].timeRemaining = remaining
+
+						if (data?.mediaState) {
+							switch (data?.mediaState) {
+								case 'CRE8_MEDIA_STATE_PLAYING':
+									this.setVariableValues({
+										current_media_name: sourceName,
+										current_media_time_elapsed: this.mediaSources[sourceName].timeElapsed,
+										current_media_time_remaining: this.mediaSources[sourceName].timeRemaining,
+										[`media_status_${validName}`]: 'Playing',
+									})
+									break
+								case 'CRE8_MEDIA_STATE_PAUSED':
+									this.setVariableValues({ [`media_status_${validName}`]: 'Paused' })
+									break
+								default:
+									this.setVariableValues({ [`media_status_${validName}`]: 'Stopped' })
+									break
+							}
+						}
+						this.setVariableValues({
+							[`media_time_elapsed_${validName}`]: this.mediaSources[sourceName].timeElapsed,
+							[`media_time_remaining_${validName}`]: remaining,
+						})
+
+						// Update media tab status if this source is assigned to a tab
+						this.updateMediaTabStatus(sourceName, data.mediaState)
+
+						this.checkFeedbacks('media_playing', 'media_source_time_remaining')
+					}
+				}
+			}
+		}
+	}
+
+	updateMediaTabStatus(sourceName, mediaState) {
+		// Check which tab (if any) has this source assigned
+		for (let i = 1; i <= 5; i++) {
+			let tabSourceVar = `media_tab_${i}_source`
+			let assignedSource = this.getVariableValue(tabSourceVar)
+			
+			if (assignedSource === sourceName) {
+				// Update tab status based on media state
+				let tabStatus = 'Stopped'
+				switch (mediaState) {
+					case 'CRE8_MEDIA_STATE_PLAYING':
+						tabStatus = 'Playing'
+						break
+					case 'CRE8_MEDIA_STATE_PAUSED':
+						tabStatus = 'Paused'
+						break
+					default:
+						tabStatus = 'Stopped'
+						break
+				}
+				
+				this.setVariableValues({
+					[`media_tab_${i}_status`]: tabStatus
+				})
+				
+				// Check feedbacks for this specific tab and active tab
+				this.checkFeedbacks('media_tab_playing', 'media_tab_status', 'active_media_tab_playing')
+				break // Source can only be assigned to one tab
 			}
 		}
 	}
