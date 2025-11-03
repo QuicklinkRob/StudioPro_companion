@@ -216,73 +216,97 @@ export function getActions() {
 				type: 'dropdown',
 				label: 'Mix Number',
 				id: 'mixNumber',
-				default: '1',
-				choices: [
-					{ id: '1', label: 'Mix 1' },
-					{ id: '2', label: 'Mix 2' },
-					{ id: '3', label: 'Mix 3' },
-					{ id: '4', label: 'Mix 4' },
-					{ id: '5', label: 'Mix 5' },
-					{ id: '6', label: 'Mix 6' },
-					{ id: '7', label: 'Mix 7' },
-					{ id: '8', label: 'Mix 8' },
-				],
-			},
-			{
-				type: 'dropdown',
-				label: 'Select Scene',
-				id: 'customSceneName',
-				default: this.sceneListDefault,
-				choices: this.sceneChoicesCustomScene,
+				default: this.mixList?.[0] ? this.mixList[0].id : '1',
+				choices: this.mixList 
+				// || [
+				// 	{ id: '1', label: 'Mix 1' },
+				// 	{ id: '2', label: 'Mix 2' },
+				// 	{ id: '3', label: 'Mix 3' },
+				// 	{ id: '4', label: 'Mix 4' },
+				// 	{ id: '5', label: 'Mix 5' },
+				// 	{ id: '6', label: 'Mix 6' },
+				// 	{ id: '7', label: 'Mix 7' },
+				// 	{ id: '8', label: 'Mix 8' },
+				// ],
 			},
 			// {
-			// 	type: 'textinput',
-			// 	useVariables: true,
-			// 	label: 'Which scene? (scene_<number>)',
+			// 	type: 'dropdown',
+			// 	label: 'Select Scene',
 			// 	id: 'customSceneName',
-			// 	default: 'scene_',
+			// 	default: this.sceneListDefault,
+			// 	choices: this.sceneChoicesCustomScene,
 			// },
 		],
 		callback: async (action) => {
-			console.log('[MIX-ACTION] set_mix action triggered with options:', action.options)
+			console.log('[MIX-ACTION] Raw action.options:', JSON.stringify(action.options, null, 2));
 			
-			// Use the dropdown value directly, not as a variable lookup
-			let sceneName = action.options.customSceneName;
+			const mixNumber = action.options.mixNumber; // Keep as string
 			
-			// If it's a variable reference, resolve it
-			if (sceneName?.startsWith('$(')) {
-				sceneName = this.getVariableValue(sceneName);
-			}
+			console.log('[MIX-ACTION] mixNumber after assignment:', mixNumber, 'Type:', typeof mixNumber);
 			
-			console.log('[MIX-ACTION] Scene name resolved:', {
-				original: action.options.customSceneName,
-				resolved: sceneName
-			})
-			
-			sceneName = sceneName ? sceneName.trim() : '';
-			const mixNumber = action.options.mixNumber;
-			
-			console.log(`Setting mix${mixNumber} to scene: ${sceneName}`)
+			// SceneName handling - commented out for now
+			// let sceneName = action.options.customSceneName;
+			// if (sceneName?.startsWith('$(')) {
+			// 	sceneName = this.getVariableValue(sceneName);
+			// }
+			// sceneName = sceneName ? sceneName.trim() : '';
+
+			console.log(`[MIX-ACTION] Setting mix${mixNumber}`)
 			
 			// Update the mix variable immediately for UI feedback
-			this.setVariableValues({
-				[`mix${mixNumber}`]: sceneName
-			});
+			// this.setVariableValues({
+			// 	[`mix${mixNumber}`]: sceneName
+			// });
 
-			console.log('Sending mix scene vendor request:', {
-				mixNumber: parseInt(mixNumber),
-				sceneName: sceneName
-			})
+			// Store current transition settings
+			const originalTransition = this.states.currentTransition;
+			const originalDuration = this.states.transitionDuration;
 			
-			// Use vendor request instead of direct SetMixScene
-			this.sendRequest('CallVendorRequest', {
-				vendorName: "cre8-app-main-controls",
-				requestType: 'setMixScene',
-				requestData: {
-					mixNumber: parseInt(mixNumber),
-					sceneName: sceneName
-				}
+			console.log('[MIX-ACTION] Preparing batch request with:', {
+				mixNumber: mixNumber,
+				mixNumberType: typeof mixNumber,
+				// originalTransition: originalTransition,
+				// originalDuration: originalDuration
 			});
+			
+			// Batch the requests: SetMixScene + quick_cut transition
+			const batchRequests = [
+				{
+					requestType: 'SetMixScene',
+					requestData: { mixNumber: `MIX${mixNumber}` },
+				},
+				{
+					requestType: 'SetCurrentSceneTransition',
+					requestData: { transitionName: 'Cut' },
+				},
+				{
+					requestType: 'SetCurrentSceneTransitionDuration',
+					requestData: { transitionDuration: 50 },
+				},
+				{
+					requestType: 'TriggerStudioModeTransition',
+				},
+				{
+					requestType: 'Sleep',
+					requestData: { sleepMillis: 100 }, 
+				},
+				{
+					requestType: 'SetCurrentSceneTransition',
+					requestData: { transitionName: originalTransition },
+				},
+				{
+					requestType: 'SetCurrentSceneTransitionDuration',
+					requestData: { transitionDuration: Math.max(originalDuration, 50) },
+				}
+			];
+
+			console.log('[MIX-ACTION] Sending batch requests:', JSON.stringify(batchRequests, null, 2));
+			
+			await this.sendBatch(batchRequests);
+			// await this.sendRequest('SetMixScene', { mixNumber: `MIX${mixNumber}` });
+
+			console.log(`[MIX-ACTION] Successfully sent ${mixNumber} with quick cut transition`);
+			this.log('info', `Set MIX: ${mixNumber} with quick cut transition`);
 		},
 	}
 
@@ -1927,7 +1951,7 @@ export function getActions() {
 
 	actions['configure_media_tab'] = {
 		name: 'Configure Media Tab Source',
-		description: 'Assign a media source to a specific media tab',
+		description: 'Assign a media player to a specific media tab',
 		options: [
 			{
 				type: 'dropdown',
@@ -1944,13 +1968,6 @@ export function getActions() {
 					{ id: '5', label: 'Media Tab 5' },
 				],
 			},
-			{
-				type: 'dropdown',
-				label: 'Media Source',
-				id: 'source',
-				default: this.mediaSourceList?.[0] ? this.mediaSourceList[0].id : '',
-				choices: this.mediaSourceList,
-			},
 		],
 		callback: async (action) => {
 			// guard clause: do nothing if no tab is selected
@@ -1961,7 +1978,16 @@ export function getActions() {
 			
 			// configure which media source belongs to which tab
 			const tabNumber = action.options.mediaTab
-			const sourceName = action.options.source
+			const tabIndex = parseInt(tabNumber) - 1 
+			let sourceName = ''
+			
+			if (this.mediaSourceList && this.mediaSourceList[tabIndex]) {
+				sourceName = this.mediaSourceList[tabIndex].id
+				this.log('debug', `auto-assigned media source "${sourceName}" to media tab ${tabNumber} (index ${tabIndex})`)
+			} else {
+				sourceName = ''
+				this.log('debug', `no media source available at index ${tabIndex} for media tab ${tabNumber}`)
+			}
 
 			this.setVariableValues({
 				[`media_tab_${tabNumber}_source`]: sourceName,
@@ -2970,6 +2996,158 @@ export function getActions() {
 			this.sendRequest('TriggerMediaPlayerInputAction', {
 				inputName: media,
 				mediaAction: playPause,
+			})
+		},
+	}
+
+	actions['set_program_scene_quick_cut'] = {
+		name: 'Set Program Scene with Quick Cut',
+		description: 'Changes to a specific scene using an instant cut transition',
+		options: [
+			{
+				type: 'textinput',
+				useVariables: true,
+				label: 'Which scene? (scene_<number>)',
+				id: 'customSceneName',
+				default: 'scene_',
+			},
+		],
+		callback: async (action) => {
+			let sceneName;
+			sceneName = this.getVariableValue(action.options.customSceneName);
+			sceneName = sceneName ? sceneName.trim() : '';
+			
+			this.log('debug', `Quick cut scene change - Variable: ${action.options.customSceneName}, for: "${sceneName}"`);
+			
+			if (!sceneName) {
+				this.log('warn', `Quick cut failed: No scene name found for variable "${action.options.customSceneName}"`);
+				return;
+			}
+			
+			const currentScene = this.states.programScene;
+			this.log('info', `Quick cut transition: ${currentScene} - ${sceneName}`);
+			
+			await this.sendBatch([
+				{
+					requestType: 'SetCurrentSceneTransition',
+					requestData: { transitionName: 'Cut' },
+				},
+				{
+					requestType: 'SetCurrentSceneTransitionDuration',
+					requestData: { transitionDuration: 50 },
+				},
+				{
+					requestType: 'SetCurrentProgramScene',
+					requestData: { sceneName: sceneName },
+				}
+			]);
+			
+			this.log('debug', 'Quick cut batch requests sent');
+		},
+	}
+
+	actions['set_vcam_aux'] = {
+		name: 'Assign vCam to AUX',
+		description: 'Map a virtual camera (vCam 1-4) to an AUX output with scene selection',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'vCam',
+				id: 'vcam',
+				default: this.vcamList?.[0] ? this.vcamList[0].id : '1',
+				choices: this.vcamList,
+			},
+			{
+				type: 'dropdown',
+				label: 'Scene (vCam 1)',
+				id: 'scene1',
+				default: this.vcam1SceneDefault,
+				choices: this.vcamSceneList,
+				isVisible: (options) => options.vcam === '1',
+			},
+			{
+				type: 'dropdown',
+				label: 'AUX Output (vCam 1)',
+				id: 'aux1',
+				default: this.vcam1AuxDefault,
+				choices: this.auxAudioList,
+				isVisible: (options) => options.vcam === '1',
+			},
+			{
+				type: 'dropdown',
+				label: 'Scene (vCam 2)',
+				id: 'scene2',
+				default: this.vcam2SceneDefault,
+				choices: this.vcamSceneList,
+				isVisible: (options) => options.vcam === '2',
+			},
+			{
+				type: 'dropdown',
+				label: 'AUX Output (vCam 2)',
+				id: 'aux2',
+				default: this.vcam2AuxDefault,
+				choices: this.auxAudioList,
+				isVisible: (options) => options.vcam === '2',
+			},
+			{
+				type: 'dropdown',
+				label: 'Scene (vCam 3)',
+				id: 'scene3',
+				default: this.vcam3SceneDefault,
+				choices: this.vcamSceneList,
+				isVisible: (options) => options.vcam === '3',
+			},
+			{
+				type: 'dropdown',
+				label: 'AUX Output (vCam 3)',
+				id: 'aux3',
+				default: this.vcam3AuxDefault,
+				choices: this.auxAudioList,
+				isVisible: (options) => options.vcam === '3',
+			},
+			{
+				type: 'dropdown',
+				label: 'Scene (vCam 4)',
+				id: 'scene4',
+				default: this.vcam4SceneDefault,
+				choices: this.vcamSceneList,
+				isVisible: (options) => options.vcam === '4',
+			},
+			{
+				type: 'dropdown',
+				label: 'AUX Output (vCam 4)',
+				id: 'aux4',
+				default: this.vcam4AuxDefault,
+				choices: this.auxAudioList,
+				isVisible: (options) => options.vcam === '4',
+			},
+		],
+		callback: async (action) => {
+			// Get vCam options from server
+			// const response = await this.sendRequest('GetVcamAuxOptions', {})
+			
+			// this.log('info', `GetVcamAuxOptions response:`)
+			// this.log('info', `  sceneList: ${JSON.stringify(response?.sceneList || [])}`)
+			// this.log('info', `  previewScene: ${response?.previewScene || 'N/A'}`)
+			// this.log('info', `  programScene: ${response?.programScene || 'N/A'}`)
+			// this.log('info', `  auxList: ${JSON.stringify(response?.auxList || [])}`)
+			
+			// Get selected values
+			const vcamNum = parseInt(action.options.vcam)
+			const sceneName = action.options[`scene${vcamNum}`] || ''
+			const sourceName = action.options[`scene${vcamNum}`] || '' // NOTE: confusion over which to use. can repurpose later for selecting scene to add to mix if needed
+			const auxName = action.options[`aux${vcamNum}`] || 'PGM'
+			
+			this.setVariableValues({
+				[`vcam_${vcamNum}_scene`]: sceneName,
+				[`vcam_${vcamNum}_aux`]: auxName,
+			})
+			
+			this.log('info', `Setting vCam ${vcamNum}: ${sceneName} -> ${auxName}`)
+			await this.sendRequest('SetVcamAux', { 
+				vcamNumber: vcamNum, 
+				sourceName: sceneName,
+				auxName: auxName 
 			})
 		},
 	}

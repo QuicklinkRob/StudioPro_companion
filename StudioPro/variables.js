@@ -79,6 +79,14 @@ export function getVariables() {
 		});
 	}
 
+	// Register vCam name and mapping variables for vCam1-4
+	for (let i = 0; i < 4; i++) {
+		const v = i + 1
+		variables.push({ variableId: `vcam_${v}_name`, name: `vCam ${v} - Display Name` })
+		variables.push({ variableId: `vcam_${v}_scene`, name: `vCam ${v} - Mapped Scene` })
+		variables.push({ variableId: `vcam_${v}_aux`, name: `vCam ${v} - Mapped AUX` })
+	}
+
 	// variables.push({ variableId: 'program_volume', name: 'Program Volume (dB)' })
 
 	//Defaults
@@ -236,14 +244,24 @@ export function getVariables() {
 	})
 
 	// Mix variables
-	variables.push({ variableId: 'mix1', name: 'Mix 1 Scene' })
-	variables.push({ variableId: 'mix2', name: 'Mix 2 Scene' })
-	variables.push({ variableId: 'mix3', name: 'Mix 3 Scene' })
-	variables.push({ variableId: 'mix4', name: 'Mix 4 Scene' })
-	variables.push({ variableId: 'mix5', name: 'Mix 5 Scene' })
-	variables.push({ variableId: 'mix6', name: 'Mix 6 Scene' })
-	variables.push({ variableId: 'mix7', name: 'Mix 7 Scene' })
-	variables.push({ variableId: 'mix8', name: 'Mix 8 Scene' })
+	// variables.push({ variableId: 'mix1', name: 'Mix 1 Scene' })
+	// variables.push({ variableId: 'mix2', name: 'Mix 2 Scene' })
+	// variables.push({ variableId: 'mix3', name: 'Mix 3 Scene' })
+	// variables.push({ variableId: 'mix4', name: 'Mix 4 Scene' })
+	// variables.push({ variableId: 'mix5', name: 'Mix 5 Scene' })
+	// variables.push({ variableId: 'mix6', name: 'Mix 6 Scene' })
+	// variables.push({ variableId: 'mix7', name: 'Mix 7 Scene' })
+	// variables.push({ variableId: 'mix8', name: 'Mix 8 Scene' })
+	
+	if (this.mixList && this.mixList.length > 0) {
+		this.mixList.forEach((mix) => {
+			const mixNumber = mix.id
+			variables.push({ 
+				variableId: `mix${mixNumber}_scene`, 
+				name: `${mix.label} - Scene Name` 
+			})
+		})
+	}
 	
 	return variables
 }

@@ -138,13 +138,38 @@ class CRE8Instance extends InstanceBase {
 	}
 
 	organizeChoices() {
-		//Sort choices alphabetically
 		this.sourceChoices?.sort((a, b) => a.id.localeCompare(b.id))
 		this.sceneChoices?.sort((a, b) => a.id.localeCompare(b.id))
 		this.textSourceList?.sort((a, b) => a.id.localeCompare(b.id))
-		this.mediaSourceList?.sort((a, b) => a.id.localeCompare(b.id))
+		// this.imageSourceList?.sort((a, b) => a.id.localeCompare(b.id))
+		// this.mediaSourceList?.sort((a, b) => a.id.localeCompare(b.id))
+
+		const originalCount = this.mediaSourceList?.length || 0
+		this.mediaSourceList = this.mediaSourceList?.filter(source => {
+			return source.id.toLowerCase().includes('media player')
+		}) || []
+		
+		if (originalCount !== this.mediaSourceList.length) {
+			this.log('debug', `Filtered mediaSourceList from ${originalCount} to ${this.mediaSourceList.length} sources for media tab control`)
+		}
+		
 		this.filterList?.sort((a, b) => a.id.localeCompare(b.id))
 		this.audioSourceList?.sort((a, b) => a.id.localeCompare(b.id))
+		
+		const validMediaPlayerIds = this.mediaSourceList?.map(source => source.id) || []
+		const filteredTab = {}
+		
+		for (let i = 1; i <= 5; i++) {
+			const currentSource = this.getVariableValue(`media_tab_${i}_source`)
+			if (currentSource && currentSource !== '' && !validMediaPlayerIds.includes(currentSource)) {
+				filteredTab[`media_tab_${i}_source`] = ''
+				this.log('debug', `cleared invalid media player source "${currentSource}" from media tab ${i}`)
+			}
+		}
+		
+		if (Object.keys(filteredTab).length > 0) {
+			this.setVariableValues(filteredTab)
+		}
 		//Special Choices - Scenes
 		this.sceneChoicesProgramPreview = [
 			{ id: 'Current Scene', label: 'Current Scene' },
@@ -165,6 +190,21 @@ class CRE8Instance extends InstanceBase {
 		this.filterListDefault = this.filterList?.[0] ? this.filterList?.[0]?.id : ''
 		this.audioSourceListDefault = this.audioSourceList?.[0] ? this.audioSourceList?.[0]?.id : ''
 		this.profileChoicesDefault = this.profileChoices?.[0] ? this.profileChoices[0].id : ''
+
+		// vCam -> AUX and Scene defaults (read from variables so action dialogs can pre-populate)
+		for (let i = 1; i <= 4; i++) {
+			const auxVarName = `vcam_${i}_aux`
+			const sceneVarName = `vcam_${i}_scene`
+			this[`vcam${i}AuxDefault`] = this.getVariableValue(auxVarName) || (this.auxAudioList?.[0] ? this.auxAudioList[0].id : 'PGM')
+			this[`vcam${i}SceneDefault`] = this.getVariableValue(sceneVarName) || (this.vcamSceneList?.[0] ? this.vcamSceneList[0].id : '')
+		}
+
+		// get vCam choices (or stored display names if set)
+		this.vcamList = []
+		for (let i = 1; i <= 4; i++) {
+			const nameVar = this.getVariableValue(`vcam_${i}_name`)
+			this.vcamList.push({ id: String(i), label: nameVar && nameVar !== '' ? nameVar : `vCam ${i}` })
+		}
 	}
 
 	updateActionsFeedbacksVariables() {
@@ -360,6 +400,7 @@ class CRE8Instance extends InstanceBase {
 		}, 500)
 		//Choices
 		this.sceneChoices = []
+		this.vcamSceneList = []
 		this.sourceChoices = []
 		this.profileChoices = []
 		this.sceneCollectionList = []
@@ -373,6 +414,7 @@ class CRE8Instance extends InstanceBase {
 		this.outputList = []
 		this.filterList = []
 		this.audioSourceList = []
+		this.mixList = []
 		this.auxAudioList = [
 			{id: "PGM", label: "PGM"},
 			{id: "AUX1", label: "AUX1"},
@@ -383,7 +425,7 @@ class CRE8Instance extends InstanceBase {
 			{id: "AUX6", label: "AUX6"},
 			{id: "AUX7", label: "AUX7"},
 			{id: "AUX8", label: "AUX8"}
-		]
+		] || this.getAudioSources()
 		this.dskTabChoices = []
 		this.dskItemChoices = []
 		//Set Initial States
@@ -439,6 +481,14 @@ class CRE8Instance extends InstanceBase {
 		this.setVariableValues({
 			current_media_button_text: 'Play', // Default to Play
 		})
+
+		// vCam choices (will be populated from variables in organizeChoices)
+		this.vcamList = [
+			{ id: '1', label: 'vCam 1' },
+			{ id: '2', label: 'vCam 2' },
+			{ id: '3', label: 'vCam 3' },
+			{ id: '4', label: 'vCam 4' },
+		]
 	}
 
 	resetSceneSourceStates() {
@@ -1080,6 +1130,37 @@ class CRE8Instance extends InstanceBase {
 			this.outputs['virtualcam_output'].outputActive = data.outputActive
 			this.checkFeedbacks('output_active')
 		})
+
+		this.cre8.on('VcamMappingChanged', (data) => {
+			try {
+				const v = data.vcamNumber
+				const a = data.auxName
+				this.log('info', `setVcamAux HIT: vCam ${v} -> ${a}`)
+				if (v != null && a != null) {
+					this.setVariableValues({ [`vcam_${v}_aux`]: a })
+					this.checkFeedbacks()
+				}
+			} catch (e) {
+				this.log('error', `Error handling VcamMappingChanged: ${e}`)
+			}
+		})
+
+		this.cre8.on('VendorRequestReceived', (data) => {
+			try {
+				// Expecting shape: { vendorName, requestType, requestData }
+				if (data?.vendorName === 'cre8-app-main-controls' && data?.requestType === 'setVcamAux') {
+					const v = data.requestData?.vcamNumber
+					const a = data.requestData?.auxName
+					this.log('info', `setVcamAux HIT: vCam ${v} -> ${a}`)
+					if (v != null && a != null) {
+						this.setVariableValues({ [`vcam_${v}_aux`]: a })
+						this.checkFeedbacks()
+					}
+				}
+			} catch (e) {
+				this.log('error', `Error handling VendorRequestReceived: ${e}`)
+			}
+		})
 		this.cre8.on('ReplayBufferSaved', (data) => {
 			this.setVariableValues({ replay_buffer_path: data.savedReplayPath })
 		})
@@ -1143,8 +1224,10 @@ class CRE8Instance extends InstanceBase {
 
 	//CRE8 Websocket Commands
 	async sendRequest(requestType, requestData) {
+		// this.log('debug', `Calling websocket method: ${requestType} with data: ${JSON.stringify(requestData)}`)
 		try {
 			let data = await this.cre8.call(requestType, requestData)
+			// this.log('debug', `Websocket method ${requestType} response: ${JSON.stringify(data)}`)
 			return data
 		} catch (error) {
 			this.log('debug', `Request ${requestType ?? ''} failed (${error})`)
@@ -1242,6 +1325,7 @@ class CRE8Instance extends InstanceBase {
 			this.buildHotkeyList()
 			this.buildOutputList()
 			this.buildMonitorList()
+			this.buildMixList()
 			this.getVideoSettings()
 			this.getReplayBufferStatus()
 			return true
@@ -1350,6 +1434,86 @@ class CRE8Instance extends InstanceBase {
 				})
 			})
 		}
+	}
+
+	async buildMixList() {
+		this.mixList = []
+		
+		try {
+			// Get all mix options in one call
+			const resp = await this.sendRequest("GetMixSceneOptions")
+			
+			console.log('[MIX-INIT] GetMixSceneOptions response:', resp)
+			
+			if (resp && Array.isArray(resp)) {
+				resp.forEach((mixOption, index) => {
+					const mixNumber = index + 1
+					const label = mixOption.name || `Mix ${mixNumber}`
+					
+					this.mixList.push({ 
+						id: String(mixNumber), 
+						label: label 
+					})
+					
+					this.setVariableValues({
+						[`mix${mixNumber}_scene`]: mixOption.sceneName || 'None'
+					})
+				})
+			} else if (resp && typeof resp === 'object') {
+				if (resp.mixes && Array.isArray(resp.mixes)) {
+					resp.mixes.forEach((mixOption) => {
+						let mixNumber
+						let label
+						
+						if (typeof mixOption === 'string') {
+							// get number from string
+							const match = mixOption.match(/(\d+)/)
+							if (match) {
+								mixNumber = parseInt(match[1])
+								label = mixOption
+							}
+						} else if (typeof mixOption === 'object') {
+							mixNumber = mixOption.mixNumber || (this.mixList.length + 1)
+							label = mixOption.name || `Mix ${mixNumber}`
+						}
+						
+						if (mixNumber) {
+							this.mixList.push({ 
+								id: String(mixNumber), 
+								label: label 
+							})
+							
+							this.setVariableValues({
+								[`mix${mixNumber}_scene`]: (typeof mixOption === 'object' ? mixOption.sceneName : null) || 'None'
+							})
+						}
+					})
+				} else {
+					Object.keys(resp).forEach((key) => {
+						const mixOption = resp[key]
+						const mixNumber = parseInt(key) || (this.mixList.length + 1)
+						const label = mixOption.name || `Mix ${mixNumber}`
+						
+						this.mixList.push({ 
+							id: String(mixNumber), 
+							label: label 
+						})
+						
+						this.setVariableValues({
+							[`mix${mixNumber}_scene`]: mixOption.sceneName || 'None'
+						})
+					})
+				}
+			} else {
+				console.log('[MIX-INIT] No mix options returned from server')
+			}
+		} catch (error) {
+			console.log('[MIX-INIT] Failed to get mix options:', error.message)
+			this.log('debug', `Failed to get mix options: ${error.message}`)
+		}
+		
+		console.log('[MIX-INIT] Built mix list:', this.mixList)
+		this.updateActionsFeedbacksVariables()
 	}
 
 	getStats() {
@@ -1494,6 +1658,14 @@ class CRE8Instance extends InstanceBase {
 				this.sceneChoices.push({ id: sceneName, label: sceneName })
 				this.buildSourceList(sceneName)
 			})
+			
+			// Get vCam AUX options to populate vcamSceneList
+			const vcamOptions = await this.sendRequest('GetVcamAuxOptions', {})
+			if (vcamOptions?.sceneList) {
+				this.vcamSceneList = vcamOptions.sceneList.map(scene => ({ id: scene, label: scene }))
+				this.log('info', `Loaded ${this.vcamSceneList.length} scenes for vCam dropdown`)
+			}
+			
 			this.updateActionsFeedbacksVariables()
 		}
 	}
@@ -1846,6 +2018,8 @@ class CRE8Instance extends InstanceBase {
 				break
 			case 'ffmpeg_source':
 			case 'vlc_source':
+			case 'media_source': // Add case for dedicated media player sources
+				this.log('debug', `Adding to mediaSourceList: ${sourceName} (inputKind: ${inputKind})`)
 				this.mediaSourceList.push({ id: sourceName, label: sourceName })
 				if (!this.mediaPoll) {
 					this.startMediaPoll()
