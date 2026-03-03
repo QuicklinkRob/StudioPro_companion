@@ -190,16 +190,17 @@ export function getFeedbacks() {
 				type: 'dropdown',
 				label: 'Mix Number',
 				id: 'mixNumber',
-				default: '1',
-				choices: [
-					{ id: '1', label: 'Mix 1' },
-					{ id: '2', label: 'Mix 2' },
-					{ id: '3', label: 'Mix 3' },
-					{ id: '4', label: 'Mix 4' },
-					{ id: '5', label: 'Mix 5' },
-					{ id: '6', label: 'Mix 6' },
-					{ id: '7', label: 'Mix 7' },
-					{ id: '8', label: 'Mix 8' },
+				default: (this.mixList && this.mixList.length > 0) ? this.mixList[0].id : 'MIX1',
+				choices: (this.mixList && this.mixList.length > 0) ? this.mixList : [
+					{ id: 'PROGRAM', label: 'Program' },
+					{ id: 'MIX1', label: 'Mix 1' },
+					{ id: 'MIX2', label: 'Mix 2' },
+					{ id: 'MIX3', label: 'Mix 3' },
+					{ id: 'MIX4', label: 'Mix 4' },
+					{ id: 'MIX5', label: 'Mix 5' },
+					{ id: 'MIX6', label: 'Mix 6' },
+					{ id: 'MIX7', label: 'Mix 7' },
+					{ id: 'MIX8', label: 'Mix 8' },
 				],
 			},
 			{
@@ -209,22 +210,25 @@ export function getFeedbacks() {
 				default: this.sceneListDefault,
 				choices: this.sceneChoicesCustomScene,
 			},
-			// {
-			// 	type: 'textinput',
-			// 	useVariables: true,
-			// 	label: 'Which scene? (scene_<number>)',
-			// 	id: 'customSceneName',
-			// 	default: 'scene_',
-			// },
 		],
 		callback: (function() {
-			// previous results to to check against so that only changes are logged
+			// previous results to check against so that only changes are logged
 			const previousResults = {};
 			
 			return function(feedback) {
 				try {
 					const sceneVariableValue = this.getVariableValue(feedback.options.customSceneName) || 'None';
-					const mixSceneValue = this.getVariableValue(`mix${feedback.options.mixNumber}`) || 'None';
+					// Convert string mix id ("PROGRAM", "MIX1"..."MIX8") to the correct variable name.
+					// mix1_scene...mix8_scene; PROGRAM maps to scene_active.
+					var mixId = feedback.options.mixNumber;
+					var mixVarName;
+					if (mixId === 'PROGRAM') {
+						mixVarName = 'scene_active';
+					} else {
+						var numMatch = mixId.match(/\d+/);
+						mixVarName = 'mix' + (numMatch ? numMatch[0] : '0') + '_scene';
+					}
+					const mixSceneValue = this.getVariableValue(mixVarName) || 'None';
 					const result = sceneVariableValue === mixSceneValue;
 					
 					// key for this specific feedback instance
@@ -960,13 +964,7 @@ export function getFeedbacks() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: '1',
-				choices: [
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: this.mediaTabChoices,
 			},
 		],
 		callback: (feedback) => {
@@ -1003,13 +1001,7 @@ export function getFeedbacks() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: '1',
-				choices: [
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: this.mediaTabChoices,
 			},
 		],
 		callback: (feedback) => {
@@ -1048,13 +1040,7 @@ export function getFeedbacks() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: '1',
-				choices: [
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: this.mediaTabChoices,
 			},
 			{
 				type: 'colorpicker',
@@ -1126,13 +1112,7 @@ export function getFeedbacks() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: '1',
-				choices: [
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: this.mediaTabChoices,
 			},
 		],
 		callback: (feedback) => {

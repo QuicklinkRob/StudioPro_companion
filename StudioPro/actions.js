@@ -193,7 +193,7 @@ export function getActions() {
 			{
 				type: 'textinput',
 				useVariables: true,
-                label: 'Which scene? (scene_<number>)',
+                label: 'Which scene? (scene_<number>, or use variables)',
 				id: 'customSceneName',
 				default: 'scene_',
 				// isVisible: (options) => options.scene === 'customSceneName',
@@ -210,105 +210,213 @@ export function getActions() {
 	}
 
 	actions['set_mix'] = {
+		// Btn 1:  switch tab only (no sceneNumber)
+		// Btn 1a: switch tab + set scene (sceneNumber provided)
 		name: 'Set Mix Scene',
 		options: [
 			{
 				type: 'dropdown',
-				label: 'Mix Number',
+				label: 'Mix',
 				id: 'mixNumber',
-				default: this.mixList?.[0] ? this.mixList[0].id : '1',
-				choices: this.mixList 
-				// || [
-				// 	{ id: '1', label: 'Mix 1' },
-				// 	{ id: '2', label: 'Mix 2' },
-				// 	{ id: '3', label: 'Mix 3' },
-				// 	{ id: '4', label: 'Mix 4' },
-				// 	{ id: '5', label: 'Mix 5' },
-				// 	{ id: '6', label: 'Mix 6' },
-				// 	{ id: '7', label: 'Mix 7' },
-				// 	{ id: '8', label: 'Mix 8' },
-				// ],
+				default: (this.mixList && this.mixList.length > 0) ? this.mixList[0].id : 'PROGRAM',
+				choices: (this.mixList && this.mixList.length > 0) ? this.mixList : [
+					{ id: 'PROGRAM', label: 'Program' },
+					{ id: 'MIX1', label: 'Mix 1' },
+					{ id: 'MIX2', label: 'Mix 2' },
+					{ id: 'MIX3', label: 'Mix 3' },
+					{ id: 'MIX4', label: 'Mix 4' },
+					{ id: 'MIX5', label: 'Mix 5' },
+					{ id: 'MIX6', label: 'Mix 6' },
+					{ id: 'MIX7', label: 'Mix 7' },
+					{ id: 'MIX8', label: 'Mix 8' },
+				],
 			},
-			// {
-			// 	type: 'dropdown',
-			// 	label: 'Select Scene',
-			// 	id: 'customSceneName',
-			// 	default: this.sceneListDefault,
-			// 	choices: this.sceneChoicesCustomScene,
-			// },
+			{
+				type: 'textinput',
+				useVariables: true,
+				label: 'Scene Number (optional – leave blank to keep current scene)',
+				id: 'sceneNumber',
+				default: '',
+			},
 		],
 		callback: async (action) => {
-			console.log('[MIX-ACTION] Raw action.options:', JSON.stringify(action.options, null, 2));
-			
-			const mixNumber = action.options.mixNumber; // Keep as string
-			
-			console.log('[MIX-ACTION] mixNumber after assignment:', mixNumber, 'Type:', typeof mixNumber);
-			
-			// SceneName handling - commented out for now
-			// let sceneName = action.options.customSceneName;
-			// if (sceneName?.startsWith('$(')) {
-			// 	sceneName = this.getVariableValue(sceneName);
-			// }
-			// sceneName = sceneName ? sceneName.trim() : '';
-
-			console.log(`[MIX-ACTION] Setting mix${mixNumber}`)
-			
-			// Update the mix variable immediately for UI feedback
-			// this.setVariableValues({
-			// 	[`mix${mixNumber}`]: sceneName
-			// });
-
-			// Store current transition settings
-			const originalTransition = this.states.currentTransition;
-			const originalDuration = this.states.transitionDuration;
-			
-			console.log('[MIX-ACTION] Preparing batch request with:', {
-				mixNumber: mixNumber,
-				mixNumberType: typeof mixNumber,
-				// originalTransition: originalTransition,
-				// originalDuration: originalDuration
-			});
-			
-			// Batch the requests: SetMixScene + quick_cut transition
-			const batchRequests = [
-				{
-					requestType: 'SetMixScene',
-					requestData: { mixNumber: `MIX${mixNumber}` },
-				},
-				{
-					requestType: 'SetCurrentSceneTransition',
-					requestData: { transitionName: 'Cut' },
-				},
-				{
-					requestType: 'SetCurrentSceneTransitionDuration',
-					requestData: { transitionDuration: 50 },
-				},
-				{
-					requestType: 'TriggerStudioModeTransition',
-				},
-				{
-					requestType: 'Sleep',
-					requestData: { sleepMillis: 100 }, 
-				},
-				{
-					requestType: 'SetCurrentSceneTransition',
-					requestData: { transitionName: originalTransition },
-				},
-				{
-					requestType: 'SetCurrentSceneTransitionDuration',
-					requestData: { transitionDuration: Math.max(originalDuration, 50) },
+			const mixNumber = action.options.mixNumber;
+			const requestData = { mixNumber };
+			const sceneNumberRaw = (action.options.sceneNumber || '').trim();
+			if (sceneNumberRaw !== '') {
+				const parsed = parseInt(sceneNumberRaw, 10);
+				if (!isNaN(parsed)) {
+					requestData.sceneNumber = parsed;
 				}
-			];
+			}
 
-			console.log('[MIX-ACTION] Sending batch requests:', JSON.stringify(batchRequests, null, 2));
-			
-			await this.sendBatch(batchRequests);
-			// await this.sendRequest('SetMixScene', { mixNumber: `MIX${mixNumber}` });
-
-			console.log(`[MIX-ACTION] Successfully sent ${mixNumber} with quick cut transition`);
-			this.log('info', `Set MIX: ${mixNumber} with quick cut transition`);
+			console.log('[MIX-ACTION] SetMixScene:', requestData);
+			await this.sendRequest('SetMixScene', requestData);
+			this.log('info', `Set mix: ${JSON.stringify(requestData)}`);
 		},
 	}
+
+	actions['set_mix_scene_background'] = {
+		// Btn 2: set the program scene for a mix WITHOUT switching to it
+		name: 'Set Mix Scene (Background)',
+		description: 'Change the program scene assigned to a mix without switching the active mix tab',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Mix',
+				id: 'mixNumber',
+				default: (this.mixList && this.mixList.length > 0) ? this.mixList[0].id : 'PROGRAM',
+				choices: (this.mixList && this.mixList.length > 0) ? this.mixList : [
+					{ id: 'PROGRAM', label: 'Program' },
+					{ id: 'MIX1', label: 'Mix 1' },
+					{ id: 'MIX2', label: 'Mix 2' },
+					{ id: 'MIX3', label: 'Mix 3' },
+					{ id: 'MIX4', label: 'Mix 4' },
+					{ id: 'MIX5', label: 'Mix 5' },
+					{ id: 'MIX6', label: 'Mix 6' },
+					{ id: 'MIX7', label: 'Mix 7' },
+					{ id: 'MIX8', label: 'Mix 8' },
+				],
+			},
+			{
+				type: 'number',
+				label: 'Scene Number',
+				id: 'sceneNumber',
+				default: 1,
+				min: 1,
+				max: 99,
+			},
+		],
+		callback: async (action) => {
+			// Convert string id ("PROGRAM": 0, "MIX1": 1, etc.)
+			var mixId = action.options.mixNumber;
+			var mixNumber;
+			if (mixId === 'PROGRAM') {
+				mixNumber = 0;
+			} else {
+				var numMatch = mixId.match(/\d+/);
+				mixNumber = numMatch ? parseInt(numMatch[0]) : 0;
+			}
+			const sceneNumber = action.options.sceneNumber;
+
+			console.log('[MIX-BG] SetMixProgramSceneBackground: mixNumber=' + mixNumber + ', sceneNumber=' + sceneNumber);
+			await this.sendRequest('SetMixProgramSceneBackground', { mixNumber: mixNumber, sceneNumber: sceneNumber });
+			this.log('info', 'Set mix ' + mixId + ' (' + mixNumber + ') scene background → scene ' + sceneNumber);
+		},
+	}
+
+	// actions['toggle_mix_to_program'] = {
+	// 	name: 'Toggle Mix ↔ Program',
+	// 	description: 'Toggle the active tab between a mix and Program. First press activates the mix; subsequent presses alternate between the mix and Program.',
+	// 	options: [
+	// 		{
+	// 			type: 'dropdown',
+	// 			label: 'Mix',
+	// 			id: 'mixNumber',
+	// 			default: (this.mixList && this.mixList.length > 1) ? this.mixList.filter(function(m) { return m.id !== 'PROGRAM' })[0].id : 'MIX1',
+	// 			choices: (this.mixList && this.mixList.length > 1) ? this.mixList.filter(function(m) { return m.id !== 'PROGRAM' }) : [
+	// 				{ id: 'MIX1', label: 'Mix 1' },
+	// 				{ id: 'MIX2', label: 'Mix 2' },
+	// 				{ id: 'MIX3', label: 'Mix 3' },
+	// 				{ id: 'MIX4', label: 'Mix 4' },
+	// 				{ id: 'MIX5', label: 'Mix 5' },
+	// 				{ id: 'MIX6', label: 'Mix 6' },
+	// 				{ id: 'MIX7', label: 'Mix 7' },
+	// 				{ id: 'MIX8', label: 'Mix 8' },
+	// 			],
+	// 		},
+	// 	],
+	// 	callback: async (action) => {
+	// 		// mixNumber is the full API string, e.g. "MIX1"
+	// 		const mixNumber = action.options.mixNumber;
+	// 		const currentToggleState = (this.states.mixToggleStates && this.states.mixToggleStates[mixNumber]) ? this.states.mixToggleStates[mixNumber] : null;
+
+	// 		console.log(`[MIX-TOGGLE] mix=${mixNumber} currentState=${currentToggleState}`);
+
+	// 		// determine target: if currently on this mix, go to PROGRAM; otherwise go to the mix
+	// 		let targetMix;
+	// 		let newToggleState;
+
+	// 		if (currentToggleState === 'mix') {
+	// 			targetMix = 'PROGRAM';
+	// 			newToggleState = 'previous';
+	// 		} else {
+	// 			// first press or returning to mix
+	// 			targetMix = mixNumber;
+	// 			newToggleState = 'mix';
+	// 		}
+
+	// 		console.log(`[MIX-TOGGLE] → SetMixScene({ mixNumber: "${targetMix}" })`);
+	// 		await this.sendRequest('SetMixScene', { mixNumber: targetMix });
+
+	// 		this.states.mixToggleStates[mixNumber] = newToggleState;
+	// 		this.log('info', `Toggled: ${mixNumber} → ${targetMix} (state: ${newToggleState})`);
+	// 	},
+	// }
+
+	// actions['revert_to_program'] = {
+	// 	name: 'Revert to Program Scene',
+	// 	description: 'Set the program output back to the stored program scene, regardless of what is currently showing',
+	// 	options: [],
+	// 	callback: async (action) => {
+	// 		const programScene = this.states.programScene;
+			
+	// 		if (!programScene) {
+	// 			this.log('warn', 'No program scene is currently stored');
+	// 			return;
+	// 		}
+			
+	// 		console.log(`[REVERT-TO-PROGRAM] Reverting to program scene: ${programScene}`);
+			
+	// 		// just set program directly
+	// 		await this.sendRequest('SetCurrentProgramScene', { sceneName: programScene });
+			
+	// 		console.log(`[REVERT-TO-PROGRAM] Successfully reverted to ${programScene}`);
+	// 		this.log('info', `Reverted to program scene: ${programScene}`);
+	// 	},
+	// }
+
+	// actions['set_mix_preview_to_program'] = {
+	// 	name: 'Set Mix Preview to Program',
+	// 	description: 'Set the current program scene as the preview for the mix',
+	// 	options: [
+	// 		{
+	// 			type: 'dropdown',
+	// 			label: 'Mix Number',
+	// 			id: 'mixNumber',
+	// 			default: this.mixList?.[0] ? this.mixList[0].id : '1',
+	// 			choices: this.mixList 
+	// 			// || [
+	// 			// 	{ id: '1', label: 'Mix 1' },
+	// 			// 	{ id: '2', label: 'Mix 2' },
+	// 			// 	{ id: '3', label: 'Mix 3' },
+	// 			// 	{ id: '4', label: 'Mix 4' },
+	// 			// 	{ id: '5', label: 'Mix 5' },
+	// 			// 	{ id: '6', label: 'Mix 6' },
+	// 			// 	{ id: '7', label: 'Mix 7' },
+	// 			// 	{ id: '8', label: 'Mix 8' },
+	// 			// ],
+	// 		},
+	// 	],
+	// 	callback: async (action) => {
+	// 		const mixNumber = action.options.mixNumber;
+	// 		const currentProgram = this.states.programScene;
+			
+	// 		if (!currentProgram) {
+	// 			this.log('warn', 'No program scene available');
+	// 			return;
+	// 		}
+			
+	// 		console.log(`[MIX-PREVIEW] Setting preview to current program scene: ${currentProgram}`);
+			
+	// 		try {
+	// 			await this.sendRequest('SetCurrentPreviewScene', { sceneName: currentProgram });
+	// 			this.log('info', `Set mix${mixNumber} preview to program: ${currentProgram}`);
+	// 		} catch (error) {
+	// 			this.log('error', `Failed to set mix preview: ${error.message}`);
+	// 		}
+	// 	},
+	// }
 
 	actions['preview_scene'] = {
 		name: 'Set Preview Scene',
@@ -323,7 +431,7 @@ export function getActions() {
 			{
 				type: 'textinput',
 				useVariables: true,
-                label: 'Which scene? (scene_<number>)',
+                label: 'Which scene? (scene_<number>, or "Program" for current program)',
 				id: 'customSceneName',
                 default: 'scene_',
                 // isVisible: (options) => options.scene === 'customSceneName',
@@ -333,6 +441,13 @@ export function getActions() {
             let sceneName;
 			sceneName = this.getVariableValue(action.options.customSceneName);
             sceneName = sceneName ? sceneName.trim() : '';
+            
+            // Handle special "Program" keyword
+            if (sceneName.toLowerCase() === 'program' || sceneName === 'Program') {
+				sceneName = this.states.programScene;
+				console.log(`[PREVIEW] Using current program scene: ${sceneName}`);
+            }
+            
             // this.log('debug', `Setting current preview scene to: "${sceneName}"`);
             if (sceneName && sceneName !== 'None') {
                 this.sendRequest('SetCurrentPreviewScene', { sceneName });
@@ -450,11 +565,17 @@ export function getActions() {
 			if (action.options.transition == 'Default' && !action.options.customDuration) {
 				this.sendRequest('TriggerStudioModeTransition')
 			} else {
+				// Anti-spam: block if a quick action is already in progress
+				if (this.states.quickActionBusy) {
+					console.log('Quick Transition blocked: debounce active')
+					return
+				}
+				this.states.quickActionBusy = true
+				setTimeout(() => { this.states.quickActionBusy = false }, 500)
 				let transitionWaitTime
 				let transitionDuration
 				let revertTransition = this.states.currentTransition
 				let revertTransitionDuration = this.states.transitionDuration > 0 ? this.states.transitionDuration : 500
-
 				if (action.options.transition == 'Cut') {
 					transitionWaitTime = 100
 				} else if (action.options.transition != 'Cut' && action.options.customDuration) {
@@ -463,41 +584,37 @@ export function getActions() {
 				} else {
 					transitionWaitTime = revertTransitionDuration + 100
 				}
-
 				if (action.options.customDuration) {
 					transitionDuration =
 						action.options.transition_time != null ? action.options.transition_time : revertTransitionDuration
 				} else {
 					transitionDuration = revertTransitionDuration
 				}
-
-				if (!this.states.transitionActive) {
-					this.sendBatch([
-						{
-							requestType: 'SetCurrentSceneTransition',
-							requestData: { transitionName: action.options.transition },
-						},
-						{
-							requestType: 'SetCurrentSceneTransitionDuration',
-							requestData: { transitionDuration: transitionDuration },
-						},
-						{
-							requestType: 'TriggerStudioModeTransition',
-						},
-						{
-							requestType: 'Sleep',
-							requestData: { sleepMillis: transitionWaitTime },
-						},
-						{
-							requestType: 'SetCurrentSceneTransition',
-							requestData: { transitionName: revertTransition },
-						},
-						{
-							requestType: 'SetCurrentSceneTransitionDuration',
-							requestData: { transitionDuration: revertTransitionDuration },
-						},
-					])
-				}
+				this.sendBatch([
+					{
+						requestType: 'SetCurrentSceneTransition',
+						requestData: { transitionName: action.options.transition },
+					},
+					{
+						requestType: 'SetCurrentSceneTransitionDuration',
+						requestData: { transitionDuration: transitionDuration },
+					},
+					{
+						requestType: 'TriggerStudioModeTransition',
+					},
+					{
+						requestType: 'Sleep',
+						requestData: { sleepMillis: transitionWaitTime },
+					},
+					{
+						requestType: 'SetCurrentSceneTransition',
+						requestData: { transitionName: revertTransition },
+					},
+					{
+						requestType: 'SetCurrentSceneTransitionDuration',
+						requestData: { transitionDuration: revertTransitionDuration },
+					},
+				])
 			}
 		},
 	}
@@ -1582,16 +1699,24 @@ export function getActions() {
 				id: 'mediaTab',
 				default: '1',
 				choices: [
+					// {
+					// 	type: 'dropdown',
+					// 	label: 'Media Tab',
+					// 	id: 'mediaTab',
+					// 	default: this.mediaTabChoices?.[0] ? this.mediaTabChoices[0].id : '1',
+					// 	choices: this.mediaTabChoices,
+					// },
 					{ id: '1', label: 'Media Tab 1' },
 					{ id: '2', label: 'Media Tab 2' },
 					{ id: '3', label: 'Media Tab 3' },
 					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
+					// { id: '5', label: 'Media Tab 5' },
 				],
 			},
 		],
 		callback: async (action) => {
 			// set the active media tab
+			this.log('debug', `selecting media tab ${action.options.mediaTab} as active from ${this.mediaTabChoices}`)
 			this.setVariableValues({
 				active_media_tab: action.options.mediaTab
 			})
@@ -1958,19 +2083,10 @@ export function getActions() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: '1',
-				choices: [
-					// need a default set to nothing to force user selection else doesn't set to anything
-					{ id: '', label: 'Select Media Tab' },
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: this.mediaTabChoices,
 			},
 		],
 		callback: async (action) => {
-			// guard clause: do nothing if no tab is selected
 			if (!action.options.mediaTab || action.options.mediaTab === '') {
 				this.log('warn', 'configure media tab: no media tab selected, action cancelled')
 				return
@@ -1998,17 +2114,14 @@ export function getActions() {
 			this.log('info', `configured media tab ${tabNumber} to use source: ${sourceName}`)
 			this.log('debug', `set active media tab to: ${tabNumber}`)
 			
-			// Trigger feedback updates for tab configuration
 			this.checkFeedbacks()
 			
-			// test the configured source by checking its status and updating states
 			if (sourceName) {
 				try {
-					// get media status for the newly configured source
 					const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: sourceName })
 					this.log('debug', `getmediaplayerinputstatus for newly configured media tab ${tabNumber} (${sourceName}):`, JSON.stringify(mediaStatus, null, 2))
 					
-					// update loop state variables with current values from API
+					// update when we get current values/data
 					const validName = this.sources[sourceName]?.validName ?? sourceName
 					const trackLoopState = mediaStatus.mediaLoop || false
 					const playlistLoopState = mediaStatus.mediaPlaylistLoop || false
@@ -2018,7 +2131,6 @@ export function getActions() {
 						[`media_playlist_loop_state_${validName}`]: playlistLoopState ? 'true' : 'false'
 					})
 					
-					// update media state for play/pause feedback
 					if (!this.mediaSources[sourceName]) {
 						this.mediaSources[sourceName] = {}
 					}
@@ -2026,7 +2138,6 @@ export function getActions() {
 					
 					this.log('debug', `updated variables for configured ${sourceName}: track=${trackLoopState}, playlist=${playlistLoopState}, state=${mediaStatus.mediaState}`)
 					
-					// trigger select tab action to ensure UI updates
 					this.log('debug', `triggering select tab action for tab ${tabNumber} (${sourceName})`)
 					await this.sendRequest('TriggerMediaInputAction', { 
 						inputName: sourceName, 
@@ -2034,7 +2145,6 @@ export function getActions() {
 					})
 					this.log('info', `triggered select tab action for media tab ${tabNumber} (${sourceName}) using mediaAction: CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_SELECT_TAB`)
 					
-					// final feedback update after all state changes
 					this.checkFeedbacks()
 					
 				} catch (error) {
@@ -2818,22 +2928,20 @@ export function getActions() {
 		description: 'Performs a cut transition with anti-spam protection',
 		options: [],
 		callback: async (action) => {
-			// Anti-spam protection
-			if (this.states.transitionActive) {
-				console.log('Cut blocked: Transition already in progress');
+			// Anti-spam: block if a quick action is already in progress
+			if (this.states.quickActionBusy) {
+				console.log('Quick Cut blocked: debounce active');
 				return;
 			}
-
+			this.states.quickActionBusy = true;
+			setTimeout(() => { this.states.quickActionBusy = false; }, 500);
 			// Store current transition settings
 			const originalTransition = this.states.currentTransition;
 			const originalDuration = this.states.transitionDuration;
-			
 			this.states.originalTransition = originalTransition;
-
 			// Set flag to indicate this is a quick cut and trigger feedback immediately
 			this.states.isQuickCut = true;
 			this.checkFeedbacks('quick_cut_flash', 'transition_active', 'current_transition');
-
 			// Perform cut without changing the persistent transition setting
 			await this.sendBatch([
 				{
@@ -2860,7 +2968,6 @@ export function getActions() {
 					requestData: { transitionDuration: Math.max(originalDuration, 50) },
 				}
 			]);
-
 			// Clear the quick cut flag and original transition after flash duration
 			setTimeout(() => {
 				this.states.isQuickCut = false;
@@ -3124,13 +3231,43 @@ export function getActions() {
 		],
 		callback: async (action) => {
 			// Get vCam options from server
-			// const response = await this.sendRequest('GetVcamAuxOptions', {})
+			const response = await this.sendRequest('GetVcamAuxOptions', {})
 			
-			// this.log('info', `GetVcamAuxOptions response:`)
+			this.log('info', `GetVcamAuxOptions response: ${JSON.stringify(response)}`)
 			// this.log('info', `  sceneList: ${JSON.stringify(response?.sceneList || [])}`)
 			// this.log('info', `  previewScene: ${response?.previewScene || 'N/A'}`)
 			// this.log('info', `  programScene: ${response?.programScene || 'N/A'}`)
 			// this.log('info', `  auxList: ${JSON.stringify(response?.auxList || [])}`)
+			
+			// update vcamSceneList from response if available, with fallback to sceneChoices
+			if (response?.sceneList && response.sceneList.length > 0) {
+				this.vcamSceneList = response.sceneList.map(scene => ({
+					id: scene,
+					label: scene
+				}))
+				// Add Program as the first scene option
+				this.vcamSceneList.unshift({ id: 'Program', label: 'Program' })
+				// add None as the initial option
+				this.vcamSceneList.unshift({ id: 'None', label: 'None' })
+				this.updateActionsFeedbacksVariables()
+				this.log('info', `Updated vcamSceneList with ${this.vcamSceneList.length} items from StudioPro`)
+			} else if (this.sceneChoices && this.sceneChoices.length > 0) {
+				// Fallback to sceneChoices if no sceneList in response
+				this.vcamSceneList = [...this.sceneChoices]
+				this.vcamSceneList.unshift({ id: 'Program', label: 'Program' })
+				this.vcamSceneList.unshift({ id: 'None', label: 'None' })
+				this.log('info', `Using sceneChoices fallback for vcamSceneList: ${this.vcamSceneList.length} scenes`)
+			}
+			
+			// update auxAudioList from response if available, keeping hardcoded fallback
+			if (response?.auxList && response.auxList.length > 0) {
+				this.auxAudioList = response.auxList.map(aux => ({
+					id: aux,
+					label: aux
+				}))
+				this.updateActionsFeedbacksVariables()
+				this.log('info', `Updated auxAudioList with ${this.auxAudioList.length} items from StudioPro`)
+			}
 			
 			// Get selected values
 			const vcamNum = parseInt(action.options.vcam)

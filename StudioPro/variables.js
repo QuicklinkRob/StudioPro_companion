@@ -260,6 +260,10 @@ export function getVariables() {
 				variableId: `mix${mixNumber}_scene`, 
 				name: `${mix.label} - Scene Name` 
 			})
+			variables.push({
+				variableId: `mix${mixNumber}_previous_scene`,
+				name: `${mix.label} - Previous Program Scene`
+			})
 		})
 	}
 	
