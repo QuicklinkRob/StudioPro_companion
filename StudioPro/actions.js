@@ -288,20 +288,12 @@ export function getActions() {
 			},
 		],
 		callback: async (action) => {
-			// Convert string id ("PROGRAM": 0, "MIX1": 1, etc.)
-			var mixId = action.options.mixNumber;
-			var mixNumber;
-			if (mixId === 'PROGRAM') {
-				mixNumber = 0;
-			} else {
-				var numMatch = mixId.match(/\d+/);
-				mixNumber = numMatch ? parseInt(numMatch[0]) : 0;
-			}
+			const mixNumber = action.options.mixNumber;
 			const sceneNumber = action.options.sceneNumber;
 
 			console.log('[MIX-BG] SetMixProgramSceneBackground: mixNumber=' + mixNumber + ', sceneNumber=' + sceneNumber);
 			await this.sendRequest('SetMixProgramSceneBackground', { mixNumber: mixNumber, sceneNumber: sceneNumber });
-			this.log('info', 'Set mix ' + mixId + ' (' + mixNumber + ') scene background → scene ' + sceneNumber);
+			this.log('info', 'Set mix ' + mixNumber + ' scene background → scene ' + sceneNumber);
 		},
 	}
 
