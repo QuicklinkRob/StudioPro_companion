@@ -27,6 +27,87 @@ export function getFeedbacks() {
 		},
 	}
 
+	feedbacks['zoom_meeting_active'] = {
+		type: 'boolean',
+		name: 'Zoom Meeting Active',
+		description: 'Highlight RED when the selected zoom meeting is started',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorRed,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Meeting',
+				id: 'meetingNum',
+				default: (this.zoom_meetingList && this.zoom_meetingList.length > 0) ? this.zoom_meetingList[0].id : '1',
+				choices: (this.zoom_meetingList && this.zoom_meetingList.length > 0) ? this.zoom_meetingList : [
+					{ id: '1', label: 'Meeting 1' },
+					{ id: '2', label: 'Meeting 2' },
+					{ id: '3', label: 'Meeting 3' },
+					{ id: '4', label: 'Meeting 4' },
+				],
+			},
+		],
+		callback: (feedback) => {
+			return !!(this.states.zoomMeetings && this.states.zoomMeetings[feedback.options.meetingNum]?.active)
+		},
+	}
+
+	feedbacks['NDI_recording_active'] = {
+		type: 'boolean',
+		name: 'NDI Recording Active',
+		description: 'Highlight RED when the selected NDI recording is active',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorRed,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'NDI Feed',
+				id: 'NDINum',
+				default: (this.NDI_recordingList && this.NDI_recordingList.length > 0) ? this.NDI_recordingList[0].id : '1',
+				choices: (this.NDI_recordingList && this.NDI_recordingList.length > 0) ? this.NDI_recordingList : [
+					{ id: '1', label: 'NDI 1' },
+					{ id: '2', label: 'NDI 2' },
+					{ id: '3', label: 'NDI 3' },
+					{ id: '4', label: 'NDI 4' },
+				],
+			},
+		],
+		callback: (feedback) => {
+			return !!(this.states.NDIRecordings && this.states.NDIRecordings[feedback.options.NDINum]?.active)
+		},
+	}
+
+	feedbacks['ISO_recording_active'] = {
+		type: 'boolean',
+		name: 'ISO Recording Active',
+		description: 'Highlight RED when the selected ISO recording is active',
+		defaultStyle: {
+			color: ColorWhite,
+			bgcolor: ColorRed,
+		},
+		options: [
+			{
+				type: 'dropdown',
+				label: 'ISO Feed',
+				id: 'ISONum',
+				default: (this.ISO_recordingList && this.ISO_recordingList.length > 0) ? this.ISO_recordingList[0].id : '1',
+				choices: (this.ISO_recordingList && this.ISO_recordingList.length > 0) ? this.ISO_recordingList : [
+					{ id: '1', label: 'ISO 1' },
+					{ id: '2', label: 'ISO 2' },
+					{ id: '3', label: 'ISO 3' },
+					{ id: '4', label: 'ISO 4' },
+				],
+			},
+		],
+		callback: (feedback) => {
+			return !!(this.states.ISORecordings && this.states.ISORecordings[feedback.options.ISONum]?.active)
+		},
+	}
+
 	feedbacks['recording'] = {
 		type: 'advanced',
 		name: 'Recording Status',
@@ -180,7 +261,7 @@ export function getFeedbacks() {
 	feedbacks['sceneMix'] = {
 		type: 'boolean',
 		name: 'Scene in Mix',
-		description: 'If a scene is in the specified mix, change the style of the button',
+		description: 'Active mix tab indicator (leave Scene blank), OR source-select row (fill in Scene to light up when that scene is assigned to the mix)',
 		defaultStyle: {
 			color: ColorWhite,
 			bgcolor: ColorOrange,
@@ -204,55 +285,40 @@ export function getFeedbacks() {
 				],
 			},
 			{
-				type: 'dropdown',
-				label: 'Select Scene',
+				type: 'textinput',
+				useVariables: true,
+				label: 'Scene (optional — leave blank for mix tab indicator)',
 				id: 'customSceneName',
-				default: this.sceneListDefault,
-				choices: this.sceneChoicesCustomScene,
+				default: '',
 			},
 		],
-		callback: (function() {
-			// previous results to check against so that only changes are logged
-			const previousResults = {};
-			
-			return function(feedback) {
-				try {
-					const sceneVariableValue = this.getVariableValue(feedback.options.customSceneName) || 'None';
-					// Convert string mix id ("PROGRAM", "MIX1"..."MIX8") to the correct variable name.
-					// mix1_scene...mix8_scene; PROGRAM maps to scene_active.
-					var mixId = feedback.options.mixNumber;
-					var mixVarName;
-					if (mixId === 'PROGRAM') {
-						mixVarName = 'scene_active';
-					} else {
-						var numMatch = mixId.match(/\d+/);
-						mixVarName = 'mix' + (numMatch ? numMatch[0] : '0') + '_scene';
-					}
-					const mixSceneValue = this.getVariableValue(mixVarName) || 'None';
-					const result = sceneVariableValue === mixSceneValue;
-					
-					// key for this specific feedback instance
-					const key = `${feedback.options.mixNumber}-${feedback.options.customSceneName}`;
-					
-					// only log if the result has changed
-					if (previousResults[key] !== result) {
-						console.log('Mix feedback state changed:', {
-							mixNumber: feedback.options.mixNumber,
-							scene: sceneVariableValue,
-							mixScene: mixSceneValue,
-							result: result
-						});
-						previousResults[key] = result;
-					}
-					
-					return result;
-				} catch (error) {
-					// console.log('Error in sceneMix feedback:', error, error.message);
-					// console.log('error', `Error in sceneMix feedback: ${error.message}`);
-					return false;
+		callback: async (feedback, context) => {
+			try {
+				const mixId = feedback.options.mixNumber;
+				const rawSceneInput = (feedback.options.customSceneName || '').trim();
+
+				if (rawSceneInput === '') {
+					return this.states.activeMix === mixId;
 				}
-			};
-		})(),
+
+				if (this.states.activeMix !== mixId) return false;
+
+				const sceneInput = ((await context.parseVariablesInString(rawSceneInput)) || '').trim();
+				if (!sceneInput) return false;
+
+				let mixVarName;
+				if (mixId === 'PROGRAM') {
+					mixVarName = 'scene_active';
+				} else {
+					const numMatch = mixId.match(/\d+/);
+					mixVarName = 'mix' + (numMatch ? numMatch[0] : '0') + '_scene';
+				}
+				const mixSceneValue = (this.getVariableValue(mixVarName) || '').trim();
+				return sceneInput === mixSceneValue;
+			} catch (error) {
+				return false;
+			}
+		},
 	}
 
 	// REVIEW: this IIFE might not be working as expected due to the this.getVariableValue() not being available in the callback function??? Replace with this???

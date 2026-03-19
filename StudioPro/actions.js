@@ -234,7 +234,7 @@ export function getActions() {
 			{
 				type: 'textinput',
 				useVariables: true,
-				label: 'Scene Number (optional – leave blank to keep current scene)',
+				label: 'Scene Number (optional - leave blank to keep current scene)',
 				id: 'sceneNumber',
 				default: '',
 			},
@@ -252,6 +252,15 @@ export function getActions() {
 
 			console.log('[MIX-ACTION] SetMixScene:', requestData);
 			await this.sendRequest('SetMixScene', requestData);
+			this.states.activeMix = mixNumber;
+			this.setVariableValues({ active_mix: mixNumber });
+			if (requestData.sceneNumber !== undefined && mixNumber !== 'PROGRAM') {
+				const numMatch = mixNumber.match(/\d+/);
+				if (numMatch) {
+					this.setVariableValues({ [`mix${numMatch[0]}_scene`]: String(requestData.sceneNumber) });
+				}
+			}
+			this.checkFeedbacks('sceneMix');
 			this.log('info', `Set mix: ${JSON.stringify(requestData)}`);
 		},
 	}
@@ -409,6 +418,150 @@ export function getActions() {
 	// 		}
 	// 	},
 	// }
+
+	actions['zoom_meeting'] = {
+		name: 'Control Zoom Meeting',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Meeting',
+				id: 'meetingNum',
+				default: (this.zoom_meetingList && this.zoom_meetingList.length > 0) ? this.zoom_meetingList[0].id : '1',
+				choices: (this.zoom_meetingList && this.zoom_meetingList.length > 0) ? this.zoom_meetingList : [
+					{ id: '1', label: 'Meeting 1' },
+					{ id: '2', label: 'Meeting 2' },
+					{ id: '3', label: 'Meeting 3' },
+					{ id: '4', label: 'Meeting 4' },
+				],
+			},
+			{
+				type: 'dropdown',
+				label: 'Type',
+				id: 'type',
+				default: 'host',
+				choices: [
+					{ id: 'host', label: 'Host' },
+					{ id: 'join', label: 'Join' },
+				],
+			},
+			// {
+			// 	type: 'dropdown',
+			// 	label: 'Action',
+			// 	id: 'action',
+			// 	default: 'toggle',
+			// 	choices: [
+			// 		{ id: 'toggle', label: 'Toggle (auto)' },
+			// 		{ id: 'start', label: 'Start' },
+			// 		{ id: 'stop', label: 'Stop' },
+			// 	],
+			// },
+		],
+		callback: async (action) => {
+			const meetingNum = parseInt(action.options.meetingNum, 10);
+			const { type } = action.options;
+			const requestData = { meetingNum, type };
+
+			console.log('[ZOOM-ACTION] SetZoomMeeting:', requestData);
+			const result = await this.sendRequest('SetZoomMeeting', requestData);
+			console.log('[ZOOM-ACTION] SetZoomMeeting result:', JSON.stringify(result));
+
+			if (result !== undefined) {
+				const key = String(result.meetingNum ?? meetingNum);
+				if (!this.states.zoomMeetings[key]) this.states.zoomMeetings[key] = {};
+				this.states.zoomMeetings[key].active = result.action === 'started';
+				this.checkFeedbacks('zoom_meeting_active');
+			}
+
+			this.log('info', `Set zoom meeting: ${JSON.stringify(requestData)}`);
+		},
+	}
+
+	actions['NDI_record'] = {
+		name: 'Toggle NDI Recording',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'NDI Feed',
+				id: 'NDINum',
+				default: (this.NDI_recordingList && this.NDI_recordingList.length > 0) ? this.NDI_recordingList[0].id : '1',
+				choices: (this.NDI_recordingList && this.NDI_recordingList.length > 0) ? this.NDI_recordingList : [
+					{ id: '1', label: 'NDI 1' },
+					{ id: '2', label: 'NDI 2' },
+					{ id: '3', label: 'NDI 3' },
+					{ id: '4', label: 'NDI 4' },
+					{ id: '5', label: 'NDI 5' },
+					{ id: '6', label: 'NDI 6' },
+					{ id: '7', label: 'NDI 7' },
+					{ id: '8', label: 'NDI 8' },
+				],
+			},
+		],
+		callback: async (action) => {
+			const recorderNum = parseInt(action.options.NDINum, 10);
+			const key = String(recorderNum);
+			const currentlyActive = !!(this.states.NDIRecordings[key]?.active);
+			const recordAction = currentlyActive ? 'stop' : 'start';
+			const requestData = { recorderNum, action: recordAction };
+
+			console.log('[NDI-ACTION] SetNDIRecording:', requestData);
+			const result = await this.sendRequest('SetNDIRecording', requestData);
+			console.log('[NDI-ACTION] SetNDIRecording result:', JSON.stringify(result));
+
+			if (result !== undefined) {
+				const resultKey = String(result.recorderNum ?? recorderNum);
+				const isActive = (result.action ?? recordAction) === 'start';
+				if (!this.states.NDIRecordings[resultKey]) this.states.NDIRecordings[resultKey] = {};
+				this.states.NDIRecordings[resultKey].active = isActive;
+				this.setVariableValues({ [`ndi_feed_${resultKey}_active`]: isActive });
+				this.checkFeedbacks('NDI_recording_active');
+			}
+			this.log('info', `Toggle NDI recording: ${JSON.stringify(requestData)}`);
+		},
+	}
+
+	actions['ISO_record'] = {
+		name: 'Toggle ISO Recording',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'ISO Feed',
+				id: 'ISONum',
+				default: (this.ISO_recordingList && this.ISO_recordingList.length > 0) ? this.ISO_recordingList[0].id : '1',
+				choices: (this.ISO_recordingList && this.ISO_recordingList.length > 0) ? this.ISO_recordingList : [
+					{ id: '1', label: 'ISO 1' },
+					{ id: '2', label: 'ISO 2' },
+					{ id: '3', label: 'ISO 3' },
+					{ id: '4', label: 'ISO 4' },
+					{ id: '5', label: 'ISO 5' },
+					{ id: '6', label: 'ISO 6' },
+					{ id: '7', label: 'ISO 7' },
+					{ id: '8', label: 'ISO 8' },
+				],
+			},
+		],
+		callback: async (action) => {
+			const recorderNum = parseInt(action.options.ISONum, 10);
+			const key = String(recorderNum);
+			const currentlyActive = !!(this.states.ISORecordings[key]?.active);
+			const recordAction = currentlyActive ? 'stop' : 'start';
+			const requestData = { recorderNum, action: recordAction };
+
+			console.log('[ISO-ACTION] SetISORecording:', requestData);
+			const result = await this.sendRequest('SetISORecording', requestData);
+			console.log('[ISO-ACTION] SetISORecording result:', JSON.stringify(result));
+
+			if (result !== undefined) {
+				const resultKey = String(result.recorderNum ?? recorderNum);
+				const isActive = (result.action ?? recordAction) === 'start';
+				if (!this.states.ISORecordings[resultKey]) this.states.ISORecordings[resultKey] = {};
+				this.states.ISORecordings[resultKey].active = isActive;
+				this.setVariableValues({ [`iso_feed_${resultKey}_active`]: isActive });
+				this.checkFeedbacks('ISO_recording_active');
+			}
+
+			this.log('info', `Toggle ISO recording: ${JSON.stringify(requestData)}`);
+		},
+	}
 
 	actions['preview_scene'] = {
 		name: 'Set Preview Scene',

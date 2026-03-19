@@ -87,6 +87,18 @@ export function getVariables() {
 		variables.push({ variableId: `vcam_${v}_aux`, name: `vCam ${v} - Mapped AUX` })
 	}
 
+	// Register NDI feed name variables for up to 8 instances
+	for (let i = 1; i <= 8; i++) {
+		variables.push({ variableId: `ndi_feed_${i}_name`, name: `NDI Feed ${i} - Display Name (stream name)` })
+		variables.push({ variableId: `ndi_feed_${i}_active`, name: `NDI Feed ${i} - Recording Active` })
+	}
+
+	// Register ISO feed name variables for up to 8 instances
+	for (let i = 1; i <= 8; i++) {
+		variables.push({ variableId: `iso_feed_${i}_name`, name: `ISO Feed ${i} - Display Name (source name)` })
+		variables.push({ variableId: `iso_feed_${i}_active`, name: `ISO Feed ${i} - Recording Active` })
+	}
+
 	// variables.push({ variableId: 'program_volume', name: 'Program Volume (dB)' })
 
 	//Defaults
@@ -144,6 +156,7 @@ export function getVariables() {
 		active_dsk_tab: '1', // Default to tab 1
 		active_media_tab: '1', // Default to media tab 1
 		current_media_button_text: 'Play', // Default to Play
+		active_mix: 'PROGRAM', // Default until server responds
 		media_tab_1_source: '',
 		media_tab_2_source: '',
 		media_tab_3_source: '',
@@ -253,15 +266,20 @@ export function getVariables() {
 	// variables.push({ variableId: 'mix7', name: 'Mix 7 Scene' })
 	// variables.push({ variableId: 'mix8', name: 'Mix 8 Scene' })
 	
+	variables.push({ variableId: 'active_mix', name: 'Active Mix (e.g. PROGRAM, MIX1…MIX8)' })
+
 	if (this.mixList && this.mixList.length > 0) {
 		this.mixList.forEach((mix) => {
-			const mixNumber = mix.id
-			variables.push({ 
-				variableId: `mix${mixNumber}_scene`, 
-				name: `${mix.label} - Scene Name` 
+			if (mix.id === 'PROGRAM') return
+			const numMatch = mix.id.match(/\d+/)
+			if (!numMatch) return
+			const mixKey = numMatch[0]
+			variables.push({
+				variableId: `mix${mixKey}_scene`,
+				name: `${mix.label} - Scene Name`
 			})
 			variables.push({
-				variableId: `mix${mixNumber}_previous_scene`,
+				variableId: `mix${mixKey}_previous_scene`,
 				name: `${mix.label} - Previous Program Scene`
 			})
 		})

@@ -157,14 +157,14 @@ class CRE8Instance extends InstanceBase {
 		this.audioSourceList?.sort((a, b) => a.id.localeCompare(b.id))
 		
 		const validMediaPlayerIds = this.mediaSourceList?.map(source => source.id) || []
-		this.log('debug', `Valid media player IDs for media tab sources: ${validMediaPlayerIds.join(', ')}`)
+		// this.log('debug', `Valid media player IDs for media tab sources: ${validMediaPlayerIds.join(', ')}`)
 		const filteredTab = {}
 		
 		for (let i = 1; i <= 5; i++) {
 			const currentSource = this.getVariableValue(`media_tab_${i}_source`)
 			if (currentSource && currentSource !== '' && !validMediaPlayerIds.includes(currentSource)) {
 				filteredTab[`media_tab_${i}_source`] = ''
-				this.log('debug', `cleared invalid media player source "${currentSource}" from media tab ${i}`)
+				// this.log('debug', `cleared invalid media player source "${currentSource}" from media tab ${i}`)
 			}
 		}
 		
@@ -218,10 +218,10 @@ class CRE8Instance extends InstanceBase {
 					label: `${source?.label || 'unnamed'}`
 				})
 			}
-			this.log('debug', `Built ${this.mediaTabChoices.length} media tab choices from ${this.mediaSourceList.length} VLC media sources`)
+			// this.log('debug', `Built ${this.mediaTabChoices.length} media tab choices from ${this.mediaSourceList.length} VLC media sources`)
 		} else {
 			this.mediaTabChoices.push({ id: '1', label: 'Media Tab 1 (no VLC sources detected)' })
-			this.log('debug', 'No VLC media sources detected, using default media tab choice')
+			// this.log('debug', 'No VLC media sources detected, using default media tab choice')
 		}
 	}
 
@@ -441,6 +441,9 @@ class CRE8Instance extends InstanceBase {
 		this.filterList = []
 		this.audioSourceList = []
 		this.mixList = []
+		this.zoom_meetingList = []
+		this.NDI_recordingList = []
+		this.ISO_recordingList = []
 		this.mediaTabChoices = []
 		this.auxAudioList = [
 			{id: "None", label: "None"},
@@ -460,6 +463,9 @@ class CRE8Instance extends InstanceBase {
 		//Set Initial States
 		this.vendorEvent = {}
 		this.states.sceneCollectionChanging = false
+		this.states.zoomMeetings = {}
+		this.states.NDIRecordings = {}
+		this.states.ISORecordings = {}
 
 		const defaultAudioSettings = {
 			audio_control_source_1: '',
@@ -764,11 +770,21 @@ class CRE8Instance extends InstanceBase {
 			console.log('VendorEvent received:', {
 				vendorName: data.vendorName,
 				eventType: data.eventType,
-				hasEventData: !!data.eventData
+				eventData: data.eventData
 			});
 			
 			this.vendorEvent = data
 			this.checkFeedbacks('vendorEvent')
+
+			// Sync active mix when the user switches tabs in the StudioPro GUI
+			if (data && (data.eventType === 'MixTabChanged' || data.eventType === 'ActiveMixChanged' || data.eventType === 'MixChanged')) {
+				const selected = data.eventData?.selected ?? data.eventData?.mixNumber ?? data.eventData?.mix
+				if (selected) {
+					console.log('[MIX-SYNC] Active mix changed from GUI:', selected)
+					this.states.activeMix = selected
+					this.checkFeedbacks('sceneMix')
+				}
+			}
 
 			if (data && data.eventType === 'MixSceneChanged') {
 				console.log('Mix scene event received:', data)
@@ -784,6 +800,44 @@ class CRE8Instance extends InstanceBase {
 						variable: this.getVariableValue(`mix${mixNumber}_scene`)
 					})
 					this.checkFeedbacks('sceneMix')
+				}
+			}
+
+			if (data && data.vendorName === 'cre8-zoom-controls') {
+				const eventData = data.eventData || {}
+				const key = String(eventData.meetingNum)
+				if (key && key !== 'undefined') {
+					if (!this.states.zoomMeetings[key]) this.states.zoomMeetings[key] = {}
+					if (data.eventType === 'joined_meeting' || data.eventType === 'hosted_meeting') {
+						this.states.zoomMeetings[key].active = true
+					} else if (data.eventType === 'left_meeting' || data.eventType === 'meeting_ended') {
+						this.states.zoomMeetings[key].active = false
+					}
+					this.checkFeedbacks('zoom_meeting_active')
+				}
+			}
+
+			if (data && data.vendorName === 'cre8-ndi-controls') {
+				const eventData = data.eventData || {}
+				const key = String(eventData.NDINum)
+				if (key && key !== 'undefined') {
+					const isActive = data.eventType === 'started'
+					if (!this.states.NDIRecordings[key]) this.states.NDIRecordings[key] = {}
+					this.states.NDIRecordings[key].active = isActive
+					this.setVariableValues({ [`ndi_feed_${key}_active`]: isActive })
+					this.checkFeedbacks('NDI_recording_active')
+				}
+			}
+
+			if (data && data.vendorName === 'cre8-iso-controls') {
+				const eventData = data.eventData || {}
+				const key = String(eventData.ISONum)
+				if (key && key !== 'undefined') {
+					const isActive = data.eventType === 'started'
+					if (!this.states.ISORecordings[key]) this.states.ISORecordings[key] = {}
+					this.states.ISORecordings[key].active = isActive
+					this.setVariableValues({ [`iso_feed_${key}_active`]: isActive })
+					this.checkFeedbacks('ISO_recording_active')
 				}
 			}
 
@@ -1376,6 +1430,9 @@ class CRE8Instance extends InstanceBase {
 			this.buildOutputList()
 			this.buildMonitorList()
 			this.buildMixList()
+			this.buildZoomMeetingList()
+			this.buildNDIRecordingList()
+			this.buildISORecordingList()
 			this.getVideoSettings()
 			this.getReplayBufferStatus()
 			return true
@@ -1494,7 +1551,7 @@ class CRE8Instance extends InstanceBase {
 		try {
 			const resp = await this.sendRequest("GetMixSceneOptions", {})
 
-			console.log('[MIX-INIT] GetMixSceneOptions response:', resp)
+			// console.log('[MIX-INIT] GetMixSceneOptions response:', resp)
 
 			if (Array.isArray(resp)) {
 				// Original format: plain array of mix objects [{ name, sceneName }, ...]
@@ -1549,20 +1606,21 @@ class CRE8Instance extends InstanceBase {
 
 				if (resp.selected) {
 					this.states.activeMix = resp.selected
-					console.log('[MIX-INIT] Active mix:', resp.selected)
+					this.setVariableValues({ active_mix: resp.selected })
+					// console.log('[MIX-INIT] Active mix:', resp.selected)
 				}
 				if (resp.currentProgramScene !== undefined) {
 					this.states.currentProgramScene = resp.currentProgramScene
-					console.log('[MIX-INIT] Current program scene:', resp.currentProgramScene)
+					// console.log('[MIX-INIT] Current program scene:', resp.currentProgramScene)
 				}
 
 			} else {
-				console.log('[MIX-INIT] No mix options returned from server - will use placeholder mixes')
+				// console.log('[MIX-INIT] No mix options returned from server - will use placeholder mixes')
 				this.mixList.push({ id: 'PROGRAM', label: 'Program' })
 			}
 
 		} catch (error) {
-			console.log('[MIX-INIT] Failed to get mix options:', error.message)
+			// console.log('[MIX-INIT] Failed to get mix options:', error.message)
 			this.log('debug', 'Failed to get mix options: ' + error.message)
 			this.mixList.push({ id: 'PROGRAM', label: 'Program' })
 		}
@@ -1574,7 +1632,7 @@ class CRE8Instance extends InstanceBase {
 				var varUpdate = {}
 				varUpdate['mix' + i + '_scene'] = 'None'
 				this.setVariableValues(varUpdate)
-				console.log('[MIX-INIT] Added placeholder for Mix ' + i)
+				// console.log('[MIX-INIT] Added placeholder for Mix ' + i)
 			}
 		}
 
@@ -1599,8 +1657,158 @@ class CRE8Instance extends InstanceBase {
 			this.mixList = otherEntries
 		}
 
-		console.log('[MIX-INIT] Built mix list:', this.mixList)
+		// console.log('[MIX-INIT] Built mix list:', this.mixList)
 		this.updateActionsFeedbacksVariables()
+	}
+
+	async buildZoomMeetingList() {
+		this.zoom_meetingList = []
+
+		try {
+			const resp = await this.sendRequest('GetZoomMeetings', {})
+
+			console.log('[ZOOM-INIT] GetZoomMeetings response:', resp)
+
+			const meetings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.meetings) ? resp.meetings : [])
+
+			meetings.forEach((meeting) => {
+				const num = meeting.meetingNum
+				const label = meeting.authenticated && meeting.email
+					? `Meeting ${num} (${meeting.email})`
+					: `Meeting ${num}`
+				this.zoom_meetingList.push({ id: String(num), label })
+				this.states.zoomMeetings[String(num)] = { active: !!(meeting.isActive) }
+			})
+
+		} catch (error) {
+			console.log('[ZOOM-INIT] Failed to get zoom meetings:', error.message)
+			this.log('debug', 'Failed to get zoom meetings: ' + error.message)
+		}
+
+		// Fallback: ensure 1-4 always available
+		// if (this.zoom_meetingList.length === 0) {
+		// 	for (let i = 1; i <= 4; i++) {
+		// 		this.zoom_meetingList.push({ id: String(i), label: `Meeting ${i}` })
+		// 	}
+		// }
+
+		console.log('[ZOOM-INIT] Built zoom meeting list:', this.zoom_meetingList)
+		this.updateActionsFeedbacksVariables()
+	}
+
+	async refreshZoomMeetingStates() {
+		try {
+			const resp = await this.sendRequest('GetZoomMeetings', {})
+			const meetings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.meetings) ? resp.meetings : [])
+			meetings.forEach((meeting) => {
+				const key = String(meeting.meetingNum)
+				if (!this.states.zoomMeetings[key]) this.states.zoomMeetings[key] = {}
+				this.states.zoomMeetings[key].active = !!(meeting.isActive)
+			})
+			this.checkFeedbacks('zoom_meeting_active')
+		} catch (error) {
+			console.log('[ZOOM] Failed to refresh zoom meeting states:', error.message)
+		}
+	}
+
+	async buildNDIRecordingList() {
+		this.NDI_recordingList = []
+
+		try {
+			const resp = await this.sendRequest('GetNDIFeeds', {})
+			console.log('[NDI-INIT] GetNDIFeeds response:', resp)
+
+			const recordings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.recordings) ? resp.recordings : [])
+
+			const nameVars = {}
+			recordings.forEach((recording) => {
+				const num = recording.NDINum
+				const name = recording.name || recording.label || `NDI ${num}`
+				const label = `${num} - ${name}`
+				this.NDI_recordingList.push({ id: String(num), label })
+				this.states.NDIRecordings[String(num)] = { active: !!(recording.isActive), name }
+				nameVars[`ndi_feed_${num}_name`] = name
+				nameVars[`ndi_feed_${num}_active`] = !!(recording.isActive)
+			})
+			if (Object.keys(nameVars).length > 0) this.setVariableValues(nameVars)
+		} catch (error) {
+			console.log('[NDI-INIT] Failed to get NDI feeds:', error.message)
+			this.log('debug', 'Failed to get NDI feeds: ' + error.message)
+		}
+
+		console.log('[NDI-INIT] Built NDI feed list:', this.NDI_recordingList)
+		this.updateActionsFeedbacksVariables()
+	}
+
+	async refreshNDIRecordingStates() {
+		try {
+			const resp = await this.sendRequest('GetNDIFeeds', {})
+			const recordings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.recordings) ? resp.recordings : [])
+			const nameVars = {}
+			recordings.forEach((recording) => {
+				const key = String(recording.NDINum)
+				const name = recording.name || recording.label || `NDI ${key}`
+				if (!this.states.NDIRecordings[key]) this.states.NDIRecordings[key] = {}
+				this.states.NDIRecordings[key].active = !!(recording.isActive)
+				this.states.NDIRecordings[key].name = name
+				nameVars[`ndi_feed_${key}_name`] = name
+				nameVars[`ndi_feed_${key}_active`] = !!(recording.isActive)
+			})
+			if (Object.keys(nameVars).length > 0) this.setVariableValues(nameVars)
+			this.checkFeedbacks('NDI_recording_active')
+		} catch (error) {
+			console.log('[NDI] Failed to refresh NDI feed states:', error.message)
+		}
+	}
+
+	async buildISORecordingList() {
+		this.ISO_recordingList = []
+
+		try {
+			const resp = await this.sendRequest('GetISOFeeds', {})
+			console.log('[ISO-INIT] GetISOFeeds response:', resp)
+
+			const recordings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.recordings) ? resp.recordings : [])
+
+			const nameVars = {}
+			recordings.forEach((recording) => {
+				const num = recording.ISONum
+				const name = recording.name || recording.label || `ISO ${num}`
+				const label = `${num} – ${name}`
+				this.ISO_recordingList.push({ id: String(num), label })
+				this.states.ISORecordings[String(num)] = { active: !!(recording.isActive), name }
+				nameVars[`iso_feed_${num}_name`] = name
+				nameVars[`iso_feed_${num}_active`] = !!(recording.isActive)
+			})
+			if (Object.keys(nameVars).length > 0) this.setVariableValues(nameVars)
+		} catch (error) {
+			console.log('[ISO-INIT] Failed to get ISO feeds:', error.message)
+			this.log('debug', 'Failed to get ISO feeds: ' + error.message)
+		}
+
+		console.log('[ISO-INIT] Built ISO feed list:', this.ISO_recordingList)
+		this.updateActionsFeedbacksVariables()
+	}
+
+	async refreshISORecordingStates() {
+		try {
+			const resp = await this.sendRequest('GetISOFeeds', {})
+			const recordings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.recordings) ? resp.recordings : [])
+			const nameVars = {}
+			recordings.forEach((recording) => {
+				const key = String(recording.ISONum)
+				const name = recording.name || recording.label || `ISO ${key}`
+				if (!this.states.ISORecordings[key]) this.states.ISORecordings[key] = {}
+				this.states.ISORecordings[key].active = !!(recording.isActive)
+				this.states.ISORecordings[key].name = name
+				nameVars[`iso_feed_${key}_name`] = name
+				nameVars[`iso_feed_${key}_active`] = !!(recording.isActive)
+			})
+			if (Object.keys(nameVars).length > 0) this.setVariableValues(nameVars)
+			this.checkFeedbacks('ISO_recording_active')
+		} catch (error) {
+			console.log('[ISO] Failed to refresh ISO feed states:', error.message)
+		}
 	}
 
 	getStats() {
@@ -2219,7 +2427,7 @@ class CRE8Instance extends InstanceBase {
 	}
 
 	async getSourceAudio(sourceName) {
-		this.log('debug', `Getting audio info for ${sourceName}`)
+		// this.log('debug', `Getting audio info for ${sourceName}`)
 		let validName = this.validName(sourceName)
 
 		let batch = [
