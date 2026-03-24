@@ -1324,6 +1324,25 @@ class CRE8Instance extends InstanceBase {
 		this.cre8.on('DSKChanged', (data) => { // TODO: Handle DSK changes - SE to implement socket event
 			this.log('debug', `DSK Changed: ${JSON.stringify(data)}`);
 		})
+
+		this.cre8.on('mixSceneChanged', async (data) => {
+			this.log('debug', `mix scene changed ${JSON.stringify(data)}`);
+			this.states.mixSceneValues = this.states.mixSceneValues || {}
+		})
+		this.cre8.on('zoomMeetingStateChanged', async (data) => {
+			this.log('debug', `zoom meeting state changed ${JSON.stringify(data)}`);
+			this.states.zoomMeetingValues = this.states.zoomMeetingValues || {}
+			this.checkFeedbacks('zoomMeeting', 'zoomMeetings')
+		})
+		this.cre8.on('ISORecordingStateChanged', async (data) => {
+			this.log('debug', `ISO recording state changed ${JSON.stringify(data)}`);
+			this.states.ISORecordingValues = this.states.ISORecordingValues || {}
+		})
+		this.cre8.on('NDIRecordingStateChanged', async (data) => {
+			this.log('debug', `NDI recording state changed ${JSON.stringify(data)}`);
+			this.states.NDIRecordingValues = this.states.NDIRecordingValues || {}
+		})
+		
 	}
 
 	//CRE8 Websocket Commands
