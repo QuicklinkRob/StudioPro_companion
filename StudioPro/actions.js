@@ -4,6 +4,7 @@ import hotkeys from './hotkeys.js'
 export function getActions() {
 	let actions = {}
 
+	// MARK: Studio Mode
 	actions['enable_studio_mode'] = {
 		name: 'Enable Studio Mode',
 		options: [],
@@ -33,6 +34,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: Network
 	actions['toggle_ip'] = {
 		name: 'Toggle Showing IP',
 		options: [],
@@ -103,6 +105,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: Recording
 	actions['stop_recording'] = {
 		name: 'Stop Recording',
 		options: [],
@@ -131,6 +134,7 @@ export function getActions() {
 			this.sendRequest('ToggleRecordPause')
 		},
 	}
+	// MARK: Streaming
 	actions['start_streaming'] = {
 		name: 'Start Streaming',
 		options: [],
@@ -152,6 +156,7 @@ export function getActions() {
 			this.sendRequest('ToggleStream')
 		},
 	}
+	// MARK: Replay Buffer
 	actions['start_replay_buffer'] = {
 		name: 'Start Replay Buffer',
 		options: [],
@@ -180,6 +185,7 @@ export function getActions() {
 			this.sendRequest('ToggleReplayBuffer')
 		},
 	}
+	// MARK: Scenes
 	actions['set_scene'] = {
 		name: 'Set Program Scene',
 		options: [
@@ -209,6 +215,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: Mixes
 	actions['set_mix'] = {
 		// Btn 1:  switch tab only (no sceneNumber)
 		// Btn 1a: switch tab + set scene (sceneNumber provided)
@@ -242,9 +249,9 @@ export function getActions() {
 		callback: async (action) => {
 			const mixNumber = action.options.mixNumber;
 			const requestData = { mixNumber };
-			const sceneNumberRaw = (action.options.sceneNumber || '').trim();
-			if (sceneNumberRaw !== '') {
-				const parsed = parseInt(sceneNumberRaw, 10);
+			const sceneNumberOption = (action.options.sceneNumber || '').trim();
+			if (sceneNumberOption !== '') {
+				const parsed = parseInt(sceneNumberOption, 10);
 				if (!isNaN(parsed)) {
 					requestData.sceneNumber = parsed;
 				}
@@ -265,6 +272,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: MIX_Bg
 	actions['set_mix_scene_background'] = {
 		// Btn 2: set the program scene for a mix WITHOUT switching to it
 		name: 'Set Mix Scene (Background)',
@@ -297,11 +305,24 @@ export function getActions() {
 			},
 		],
 		callback: async (action) => {
+
+			const response = await this.sendRequest('GetMixOptions', {})// Get mix options from server
+			this.log('info', `GetMixOptions response: ${JSON.stringify(response)}`)
+			
 			const mixNumber = action.options.mixNumber;
 			const sceneNumber = action.options.sceneNumber;
 
 			console.log('[MIX-BG] SetMixProgramSceneBackground: mixNumber=' + mixNumber + ', sceneNumber=' + sceneNumber);
 			await this.sendRequest('SetMixProgramSceneBackground', { mixNumber: mixNumber, sceneNumber: sceneNumber });
+
+			// Update local state so feedbacks reflect the background change
+			if (mixNumber !== 'PROGRAM') {
+				const numMatch = mixNumber.match(/\d+/);
+				if (numMatch) {
+					this.setVariableValues({ [`mix${numMatch[0]}_scene`]: String(sceneNumber) });
+				}
+			}
+			this.checkFeedbacks('sceneMix');
 			this.log('info', 'Set mix ' + mixNumber + ' scene background → scene ' + sceneNumber);
 		},
 	}
@@ -419,6 +440,7 @@ export function getActions() {
 	// 	},
 	// }
 
+	// MARK: Zoom
 	actions['zoom_meeting'] = {
 		name: 'Control Zoom Meeting',
 		options: [
@@ -444,40 +466,65 @@ export function getActions() {
 					{ id: 'join', label: 'Join' },
 				],
 			},
-			// {
-			// 	type: 'dropdown',
-			// 	label: 'Action',
-			// 	id: 'action',
-			// 	default: 'toggle',
-			// 	choices: [
-			// 		{ id: 'toggle', label: 'Toggle (auto)' },
-			// 		{ id: 'start', label: 'Start' },
-			// 		{ id: 'stop', label: 'Stop' },
-			// 	],
-			// },
+			{
+				type: 'dropdown',
+				label: 'Action',
+				id: 'meetingAction',
+				default: 'toggle',
+				choices: [
+					{ id: 'toggle', label: 'Toggle (auto)' },
+					{ id: 'start', label: 'Start' },
+					{ id: 'stop', label: 'Stop' },
+				],
+			},
 		],
 		callback: async (action) => {
 			const meetingNum = parseInt(action.options.meetingNum, 10);
 			const { type } = action.options;
+			const key = String(meetingNum);
+			const currentlyActive = !!(this.states.zoomMeetings[key]?.active);
+			const selected = action.options.meetingAction ?? 'toggle';
+
+			let effectiveAction;
 			const requestData = { meetingNum, type };
+
+			if (selected === 'start') {
+				if (currentlyActive) {
+					this.log('info', `Zoom meeting ${key} already active, skipping start`);
+					return;
+				}
+				effectiveAction = 'start';
+				requestData.action = 'start';
+			} else if (selected === 'stop') {
+				if (!currentlyActive) {
+					this.log('info', `Zoom meeting ${key} not active, skipping stop`);
+					return;
+				}
+				effectiveAction = 'stop';
+				requestData.action = 'stop';
+			} else {
+				effectiveAction = currentlyActive ? 'stop' : 'start';
+			}
 
 			console.log('[ZOOM-ACTION] SetZoomMeeting:', requestData);
 			const result = await this.sendRequest('SetZoomMeeting', requestData);
 			console.log('[ZOOM-ACTION] SetZoomMeeting result:', JSON.stringify(result));
 
 			if (result !== undefined) {
-				const key = String(result.meetingNum ?? meetingNum);
-				if (!this.states.zoomMeetings[key]) this.states.zoomMeetings[key] = {};
-				this.states.zoomMeetings[key].active = result.action === 'started';
+				const resultKey = String(result.meetingNum ?? meetingNum);
+				if (!this.states.zoomMeetings[resultKey]) this.states.zoomMeetings[resultKey] = {};
+				const isActive = (result.action ?? effectiveAction) === 'start';
+				this.states.zoomMeetings[resultKey].active = isActive;
 				this.checkFeedbacks('zoom_meeting_active');
 			}
 
-			this.log('info', `Set zoom meeting: ${JSON.stringify(requestData)}`);
+			this.log('info', `Zoom meeting ${selected}: ${JSON.stringify(requestData)}`);
 		},
 	}
 
+	// MARK: NDI & ISO Recording
 	actions['NDI_record'] = {
-		name: 'Toggle NDI Recording',
+		name: 'NDI Recording',
 		options: [
 			{
 				type: 'dropdown',
@@ -489,10 +536,21 @@ export function getActions() {
 					{ id: '2', label: 'NDI 2' },
 					{ id: '3', label: 'NDI 3' },
 					{ id: '4', label: 'NDI 4' },
-					{ id: '5', label: 'NDI 5' },
-					{ id: '6', label: 'NDI 6' },
-					{ id: '7', label: 'NDI 7' },
-					{ id: '8', label: 'NDI 8' },
+					// { id: '5', label: 'NDI 5' },
+					// { id: '6', label: 'NDI 6' },
+					// { id: '7', label: 'NDI 7' },
+					// { id: '8', label: 'NDI 8' },
+				],
+			},
+			{
+				type: 'dropdown',
+				label: 'Action',
+				id: 'recordAction',
+				default: 'toggle',
+				choices: [
+					{ id: 'toggle', label: 'Toggle' },
+					{ id: 'start', label: 'Start' },
+					{ id: 'stop', label: 'Stop' },
 				],
 			},
 		],
@@ -500,7 +558,25 @@ export function getActions() {
 			const recorderNum = parseInt(action.options.NDINum, 10);
 			const key = String(recorderNum);
 			const currentlyActive = !!(this.states.NDIRecordings[key]?.active);
-			const recordAction = currentlyActive ? 'stop' : 'start';
+			const selected = action.options.recordAction ?? 'toggle';
+
+			let recordAction;
+			if (selected === 'toggle') {
+				recordAction = currentlyActive ? 'stop' : 'start';
+			} else if (selected === 'start') {
+				if (currentlyActive) {
+					this.log('info', `NDI ${key} already recording, skipping start`);
+					return;
+				}
+				recordAction = 'start';
+			} else {
+				if (!currentlyActive) {
+					this.log('info', `NDI ${key} not recording, skipping stop`);
+					return;
+				}
+				recordAction = 'stop';
+			}
+
 			const requestData = { recorderNum, action: recordAction };
 
 			console.log('[NDI-ACTION] SetNDIRecording:', requestData);
@@ -515,12 +591,12 @@ export function getActions() {
 				this.setVariableValues({ [`ndi_feed_${resultKey}_active`]: isActive });
 				this.checkFeedbacks('NDI_recording_active');
 			}
-			this.log('info', `Toggle NDI recording: ${JSON.stringify(requestData)}`);
+			this.log('info', `NDI recording ${recordAction}: ${JSON.stringify(requestData)}`);
 		},
 	}
 
 	actions['ISO_record'] = {
-		name: 'Toggle ISO Recording',
+		name: 'ISO Recording',
 		options: [
 			{
 				type: 'dropdown',
@@ -532,10 +608,21 @@ export function getActions() {
 					{ id: '2', label: 'ISO 2' },
 					{ id: '3', label: 'ISO 3' },
 					{ id: '4', label: 'ISO 4' },
-					{ id: '5', label: 'ISO 5' },
-					{ id: '6', label: 'ISO 6' },
-					{ id: '7', label: 'ISO 7' },
-					{ id: '8', label: 'ISO 8' },
+					// { id: '5', label: 'ISO 5' },
+					// { id: '6', label: 'ISO 6' },
+					// { id: '7', label: 'ISO 7' },
+					// { id: '8', label: 'ISO 8' },
+				],
+			},
+			{
+				type: 'dropdown',
+				label: 'Action',
+				id: 'recordAction',
+				default: 'toggle',
+				choices: [
+					{ id: 'toggle', label: 'Toggle' },
+					{ id: 'start', label: 'Start' },
+					{ id: 'stop', label: 'Stop' },
 				],
 			},
 		],
@@ -543,7 +630,25 @@ export function getActions() {
 			const recorderNum = parseInt(action.options.ISONum, 10);
 			const key = String(recorderNum);
 			const currentlyActive = !!(this.states.ISORecordings[key]?.active);
-			const recordAction = currentlyActive ? 'stop' : 'start';
+			const selected = action.options.recordAction ?? 'toggle';
+
+			let recordAction;
+			if (selected === 'toggle') {
+				recordAction = currentlyActive ? 'stop' : 'start';
+			} else if (selected === 'start') {
+				if (currentlyActive) {
+					this.log('info', `ISO ${key} already recording, skipping start`);
+					return;
+				}
+				recordAction = 'start';
+			} else {
+				if (!currentlyActive) {
+					this.log('info', `ISO ${key} not recording, skipping stop`);
+					return;
+				}
+				recordAction = 'stop';
+			}
+
 			const requestData = { recorderNum, action: recordAction };
 
 			console.log('[ISO-ACTION] SetISORecording:', requestData);
@@ -559,10 +664,11 @@ export function getActions() {
 				this.checkFeedbacks('ISO_recording_active');
 			}
 
-			this.log('info', `Toggle ISO recording: ${JSON.stringify(requestData)}`);
+			this.log('info', `ISO recording ${recordAction}: ${JSON.stringify(requestData)}`);
 		},
 	}
 
+	// MARK: Preview & Switching
 	actions['preview_scene'] = {
 		name: 'Set Preview Scene',
 		options: [
@@ -663,6 +769,7 @@ export function getActions() {
 			}
 		},
 	}
+	// MARK: Transitions
 	actions['do_transition'] = {
 		name: 'Transition',
 		description: 'Transitions preview to program in Studio Mode',
@@ -795,6 +902,7 @@ export function getActions() {
 			this.sendRequest('SetCurrentSceneTransitionDuration', { transitionDuration: action.options.duration })
 		},
 	}
+	// MARK: Stream Settings
 	actions['set_stream_settings'] = {
 		name: 'Set Stream Settings',
 		options: [
@@ -884,6 +992,7 @@ export function getActions() {
 			this.sendRequest('ToggleRecord')
 		},
 	}
+	// MARK: Audio Sources
 	actions['set_source_mute'] = {
 		name: 'Set Source Mute',
 		options: [
@@ -1104,6 +1213,7 @@ export function getActions() {
 			})
 		},
 	}
+	// MARK: Source Visibility
 	actions['toggle_scene_item'] = {
 		name: 'Set Source Visibility',
 		description: 'Set or toggle the visibility of a source within a scene',
@@ -1236,6 +1346,7 @@ export function getActions() {
 			this.sendRequest('SetInputSettings', { inputName: action.options.source, inputSettings: { text: newText } })
 		},
 	}
+	// MARK: Hotkeys
 	actions['trigger-hotkey'] = {
 		name: 'Trigger Hotkey by ID',
 		options: [
@@ -1300,6 +1411,7 @@ export function getActions() {
 			})
 		},
 	}
+	// MARK: Profiles & Collections
 	actions['set_profile'] = {
 		name: 'Set Profile',
 		options: [
@@ -1330,6 +1442,7 @@ export function getActions() {
 			this.sendRequest('SetCurrentSceneCollection', { sceneCollectionName: action.options.scene_collection })
 		},
 	}
+	// MARK: Outputs
 	actions['start_output'] = {
 		name: 'Start Output',
 		options: [
@@ -1508,6 +1621,7 @@ export function getActions() {
 			})
 		},
 	}
+	// MARK: Filters
 	actions['toggle_filter'] = {
 		name: 'Set Filter Visibility',
 		options: [
@@ -1629,6 +1743,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: Media Playback
 	actions['toggle_track_loop'] = {
 		name: 'Toggle Track Loop',
 		description: 'enable, disable, or toggle track loop mode for media source',
@@ -1833,7 +1948,7 @@ export function getActions() {
 		},
 	}
 
-	// Media Tab Management Actions
+	// MARK: Media Tabs
 	actions['select_media_tab'] = {
 		name: 'Select Media Tab',
 		description: 'Switch to a specific media tab for control',
@@ -2347,6 +2462,7 @@ export function getActions() {
 			})
 		},
 	}
+	// MARK: Projectors & Source Properties
 	actions['open_projector'] = {
 		name: 'Open Projector',
 		options: [
@@ -2568,6 +2684,7 @@ export function getActions() {
 			this.sendRequest('OpenInputInteractDialog', { inputName: action.options.source })
 		},
 	}
+	// MARK: Custom Commands
 	actions['custom_command'] = {
 		name: 'Custom Command',
 		options: [
@@ -2662,7 +2779,8 @@ export function getActions() {
 			this.sendRequest('CallVendorRequest', data)
 		},
 	}
-	
+
+	// MARK: DSK
 	actions['select_dsk_tab'] = {
 		name: 'Select DSK Tab',
 		description: 'Set which DSK tab to view/control with the DSK item buttons (does not toggle DSK items)',
@@ -2923,6 +3041,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: Audio Control
 	actions['audio_control_knob'] = {
 		name: 'Audio Source Control',
 		description: 'Audio knobs will allow for the audio sources and AUX\'s to be cycled through, and to adjust level',
@@ -3068,6 +3187,7 @@ export function getActions() {
 		}
 	}
 
+	// MARK: Quick Transitions
 	actions['quick_cut'] = {
 		name: 'Quick Cut',
 		description: 'Performs a cut transition with anti-spam protection',
@@ -3298,6 +3418,7 @@ export function getActions() {
 		},
 	}
 
+	// MARK: vCam
 	actions['set_vcam_aux'] = {
 		name: 'Assign vCam to AUX',
 		description: 'Map a virtual camera (vCam 1-4) to an AUX output with scene selection',
@@ -3386,10 +3507,7 @@ export function getActions() {
 			
 			// update vcamSceneList from response if available, with fallback to sceneChoices
 			if (response?.sceneList && response.sceneList.length > 0) {
-				this.vcamSceneList = response.sceneList.map(scene => ({
-					id: scene,
-					label: scene
-				}))
+				this.vcamSceneList = response = await this.sendRequest('GetVcamAuxOptions', {})
 				// Add Program as the first scene option
 				this.vcamSceneList.unshift({ id: 'Program', label: 'Program' })
 				// add None as the initial option

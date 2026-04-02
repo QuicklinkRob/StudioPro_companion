@@ -13,6 +13,7 @@ export function getFeedbacks() {
 	const ColorQLRed = combineRgb(226, 87, 76)
 	const ColorBlue = combineRgb(0, 0, 255)
 
+	// MARK: Streaming
 	feedbacks['streaming'] = {
 		type: 'boolean',
 		name: 'Streaming Active',
@@ -27,6 +28,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Remote Recordings
 	feedbacks['zoom_meeting_active'] = {
 		type: 'boolean',
 		name: 'Zoom Meeting Active',
@@ -108,6 +110,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Recording Status
 	feedbacks['recording'] = {
 		type: 'advanced',
 		name: 'Recording Status',
@@ -149,6 +152,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Scenes
 	feedbacks['scene_active'] = {
 		type: 'advanced',
 		name: 'Scene in Preview / Program',
@@ -258,6 +262,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Mixes
 	feedbacks['sceneMix'] = {
 		type: 'boolean',
 		name: 'Scene in Mix',
@@ -295,15 +300,15 @@ export function getFeedbacks() {
 		callback: async (feedback, context) => {
 			try {
 				const mixId = feedback.options.mixNumber;
-				const rawSceneInput = (feedback.options.customSceneName || '').trim();
+				const sceneOption = (feedback.options.customSceneName || '').trim();
 
-				if (rawSceneInput === '') {
+				// Tab indicator mode - no scene specified
+				if (sceneOption === '') {
 					return this.states.activeMix === mixId;
 				}
 
 				if (this.states.activeMix !== mixId) return false;
-
-				const sceneInput = ((await context.parseVariablesInString(rawSceneInput)) || '').trim();
+				const sceneInput = ((await context.parseVariablesInString(sceneOption)) || '').trim();
 				if (!sceneInput) return false;
 
 				let mixVarName;
@@ -424,6 +429,7 @@ export function getFeedbacks() {
 		// },
 	}
 
+	// MARK: Sources
 	feedbacks['scene_item_active'] = {
 		type: 'boolean',
 		name: 'Source Visible in Program',
@@ -480,6 +486,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Profile & Collection
 	feedbacks['profile_active'] = {
 		type: 'boolean',
 		name: 'Profile Active',
@@ -595,6 +602,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Outputs & Replay Buffer
 	feedbacks['output_active'] = {
 		type: 'boolean',
 		name: 'Output Active',
@@ -632,6 +640,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Transitions
 	feedbacks['transition_active'] = {
 		type: 'boolean',
 		name: 'Transition in Progress',
@@ -713,6 +722,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Filters
 	feedbacks['filter_enabled'] = {
 		type: 'boolean',
 		name: 'Filter Enabled',
@@ -749,6 +759,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Audio
 	feedbacks['audio_muted'] = {
 		type: 'boolean',
 		name: 'Audio Muted',
@@ -844,6 +855,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Media Playback
 	feedbacks['media_playing'] = {
 		type: 'boolean',
 		name: 'Media Playing',
@@ -1015,7 +1027,7 @@ export function getFeedbacks() {
 		},
 	}
 
-	// Media Tab Feedbacks
+	// MARK: Media Tabs
 	feedbacks['media_tab_selected'] = {
 		type: 'boolean',
 		name: 'Media Tab Selected',
@@ -1216,6 +1228,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Studio Mode & Stream Stats
 	feedbacks['studioMode'] = {
 		type: 'boolean',
 		name: 'Studio Mode Active',
@@ -1471,6 +1484,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: DSK
 	feedbacks['dsk_tab_simple_active'] = {
 		type: 'boolean',
 		name: 'DSK Tab Simple Active',
@@ -1742,6 +1756,7 @@ export function getFeedbacks() {
 		},
 	}
 
+	// MARK: Flash Effects
 	feedbacks['quick_cut_flash'] = {
 		type: 'boolean',
 		name: 'Quick Cut Flash',

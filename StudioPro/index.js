@@ -395,6 +395,7 @@ class CRE8Instance extends InstanceBase {
 		}
 	}
 
+	// MARK: init state
 	initializeStates() {
 		//Basic Info
 		this.scenes = []
@@ -464,6 +465,7 @@ class CRE8Instance extends InstanceBase {
 		this.vendorEvent = {}
 		this.states.sceneCollectionChanging = false
 		this.states.zoomMeetings = {}
+		this.states.zoomMeetingValues = {}
 		this.states.NDIRecordings = {}
 		this.states.ISORecordings = {}
 
@@ -612,6 +614,7 @@ class CRE8Instance extends InstanceBase {
 	// 	})
 	// }
 
+	// MARK: CRE8 Connection
 	//CRE8 Websocket Connection
 	async connectCRE8() {
 		if (this.cre8) {
@@ -669,6 +672,7 @@ class CRE8Instance extends InstanceBase {
 					}, 1000) // load audio control settings after audio sources are built
 				}
 			}
+			this.log('debug', 'Finished connectCRE8')
 		} catch (error) {
 			this.processWebsocketError(error)
 		}
@@ -757,7 +761,8 @@ class CRE8Instance extends InstanceBase {
 		// Update scene choices
 		this.updateSceneChoices();
 	}	
-	//CRE8 Websocket Listeners
+	// MARK: Listeners
+	// CRE8 Websocket Listeners
 	async cre8Listeners() {
 		//General
 		this.cre8.once('ExitStarted', () => {
@@ -962,6 +967,7 @@ class CRE8Instance extends InstanceBase {
 			this.setVariableValues({ scene_active: this.states.programScene })
 			this.checkFeedbacks('scene_active')
 			this.checkFeedbacks('sceneProgram')
+			this.checkFeedbacks('sceneMix')
 			
 			// sync toggle states when program scene changes
 			// check if the new program scene matches any stored mix or previous scenes
@@ -1084,6 +1090,7 @@ class CRE8Instance extends InstanceBase {
 			this.checkFeedbacks('audio_muted')
 		})
 		this.cre8.on('InputVolumeChanged', (data) => {
+			this.log('debug', `Input Volume Changed: ${JSON.stringify(data)}`)
 			this.sources[data.inputName].inputVolume = this.roundNumber(data.inputVolumeDb, 1)
 			let name = this.sources[data.inputName].validName
 			this.setVariableValues({ [`volume_${name}`]: this.sources[data.inputName].inputVolume + 'db' })
@@ -1325,26 +1332,37 @@ class CRE8Instance extends InstanceBase {
 			this.log('debug', `DSK Changed: ${JSON.stringify(data)}`);
 		})
 
-		this.cre8.on('mixSceneChanged', async (data) => {
-			this.log('debug', `mix scene changed ${JSON.stringify(data)}`);
-			this.states.mixSceneValues = this.states.mixSceneValues || {}
+		this.cre8.on('MixSceneChanged', async (data) => {
+			this.log('debug', `MixSceneChanged: ${JSON.stringify(data)}`)
+			await this.refreshMixSceneStates()
 		})
-		this.cre8.on('zoomMeetingStateChanged', async (data) => {
-			this.log('debug', `zoom meeting state changed ${JSON.stringify(data)}`);
-			this.states.zoomMeetingValues = this.states.zoomMeetingValues || {}
-			this.checkFeedbacks('zoomMeeting', 'zoomMeetings')
+		this.cre8.on('ZoomMeetingStateChanged', async (data) => {
+			this.log('debug', `ZoomMeetingStateChanged: ${JSON.stringify(data)}`)
+			await this.refreshZoomMeetingStates()
 		})
-		this.cre8.on('ISORecordingStateChanged', async (data) => {
-			this.log('debug', `ISO recording state changed ${JSON.stringify(data)}`);
-			this.states.ISORecordingValues = this.states.ISORecordingValues || {}
+		//MARK: NDI&ISO listeners
+		this.cre8.on('ISORecordingStateChanged', (data) => {
+			this.log('debug', `ISORecordingStateChanged: ${JSON.stringify(data)}`)
+			const num = String(data.recorderNumber)
+			const isActive = data.status === 'active'
+			if (!this.states.ISORecordings[num]) this.states.ISORecordings[num] = {}
+			this.states.ISORecordings[num].active = isActive
+			this.setVariableValues({ [`iso_feed_${num}_active`]: isActive })
+			this.checkFeedbacks('ISO_recording_active')
 		})
-		this.cre8.on('NDIRecordingStateChanged', async (data) => {
-			this.log('debug', `NDI recording state changed ${JSON.stringify(data)}`);
-			this.states.NDIRecordingValues = this.states.NDIRecordingValues || {}
+		this.cre8.on('NDIRecordingStateChanged', (data) => {
+			this.log('debug', `NDIRecordingStateChanged: ${JSON.stringify(data)}`)
+			const num = String(data.recorderNumber)
+			const isActive = data.status === 'active'
+			if (!this.states.NDIRecordings[num]) this.states.NDIRecordings[num] = {}
+			this.states.NDIRecordings[num].active = isActive
+			this.setVariableValues({ [`ndi_feed_${num}_active`]: isActive })
+			this.checkFeedbacks('NDI_recording_active')
 		})
 		
 	}
 
+	// MARK: Websocket Cmnds
 	//CRE8 Websocket Commands
 	async sendRequest(requestType, requestData) {
 		// this.log('debug', `Calling websocket method: ${requestType} with data: ${JSON.stringify(requestData)}`)
@@ -1373,7 +1391,7 @@ class CRE8Instance extends InstanceBase {
 		}
 	}
 
-	//Polls
+	// MARK: Polling
 	startReconnectionPoll() {
 		this.stopReconnectionPoll()
 		this.reconnectionPoll = setInterval(() => {
@@ -1429,7 +1447,7 @@ class CRE8Instance extends InstanceBase {
 		}
 	}
 
-	//General CRE8 Project Info
+	// MARK: builds & refresh
 	async cre8Info() {
 		try {
 			let version = await this.sendRequest('GetVersion')
@@ -1680,25 +1698,62 @@ class CRE8Instance extends InstanceBase {
 		this.updateActionsFeedbacksVariables()
 	}
 
+	async refreshMixSceneStates() {
+		try {
+			const resp = await this.sendRequest('GetMixSceneOptions', {})
+			const varUpdates = {}
+
+			if (Array.isArray(resp)) {
+				resp.forEach((mixOption, index) => {
+					const mixNumber = index + 1
+					if (mixOption && mixOption.sceneName) {
+						this.states[`mix${mixNumber}Scene`] = mixOption.sceneName
+						varUpdates[`mix${mixNumber}_scene`] = mixOption.sceneName
+					}
+				})
+			} else if (resp && resp.mixes && Array.isArray(resp.mixes)) {
+				if (resp.selected) {
+					this.states.activeMix = resp.selected
+					varUpdates['active_mix'] = resp.selected
+				}
+				resp.mixes.forEach((item) => {
+					const mixId = typeof item === 'string' ? item : (item?.id || item?.name)
+					if (!mixId) return
+					const numMatch = mixId.match(/\d+/)
+					if (numMatch) {
+						const num = parseInt(numMatch[0])
+						if (num >= 1 && num <= 8 && item?.sceneName) {
+							this.states[`mix${num}Scene`] = item.sceneName
+							varUpdates[`mix${num}_scene`] = item.sceneName
+						}
+					}
+				})
+			}
+
+			if (Object.keys(varUpdates).length > 0) this.setVariableValues(varUpdates)
+			this.checkFeedbacks('sceneMix')
+		} catch (error) {
+			this.log('debug', 'Failed to refresh mix scene states: ' + error.message)
+		}
+	}
+
 	async buildZoomMeetingList() {
 		this.zoom_meetingList = []
 
 		try {
 			const resp = await this.sendRequest('GetZoomMeetings', {})
-
 			console.log('[ZOOM-INIT] GetZoomMeetings response:', resp)
 
 			const meetings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.meetings) ? resp.meetings : [])
 
 			meetings.forEach((meeting) => {
-				const num = meeting.meetingNum
+				const key = String(meeting.meetingNum)
 				const label = meeting.authenticated && meeting.email
-					? `Meeting ${num} (${meeting.email})`
-					: `Meeting ${num}`
-				this.zoom_meetingList.push({ id: String(num), label })
-				this.states.zoomMeetings[String(num)] = { active: !!(meeting.isActive) }
+					? `Meeting ${key} (${meeting.email})`
+					: `Meeting ${key}`
+				this.zoom_meetingList.push({ id: key, label })
+				this.states.zoomMeetings[key] = { active: !!(meeting.isActive) }
 			})
-
 		} catch (error) {
 			console.log('[ZOOM-INIT] Failed to get zoom meetings:', error.message)
 			this.log('debug', 'Failed to get zoom meetings: ' + error.message)
@@ -1741,13 +1796,12 @@ class CRE8Instance extends InstanceBase {
 
 			const nameVars = {}
 			recordings.forEach((recording) => {
-				const num = recording.NDINum
-				const name = recording.name || recording.label || `NDI ${num}`
-				const label = `${num} - ${name}`
-				this.NDI_recordingList.push({ id: String(num), label })
-				this.states.NDIRecordings[String(num)] = { active: !!(recording.isActive), name }
-				nameVars[`ndi_feed_${num}_name`] = name
-				nameVars[`ndi_feed_${num}_active`] = !!(recording.isActive)
+				const key = String(recording.NDINum)
+				const name = recording.name || recording.label || `NDI ${key}`
+				this.NDI_recordingList.push({ id: key, label: `${key} - ${name}` })
+				this.states.NDIRecordings[key] = { active: !!(recording.isActive), name }
+				nameVars[`ndi_feed_${key}_name`] = name
+				nameVars[`ndi_feed_${key}_active`] = !!(recording.isActive)
 			})
 			if (Object.keys(nameVars).length > 0) this.setVariableValues(nameVars)
 		} catch (error) {
@@ -1762,11 +1816,13 @@ class CRE8Instance extends InstanceBase {
 	async refreshNDIRecordingStates() {
 		try {
 			const resp = await this.sendRequest('GetNDIFeeds', {})
+			console.log('[NDI-REFRESH] GetNDIFeeds response:', JSON.stringify(resp))
 			const recordings = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.recordings) ? resp.recordings : [])
 			const nameVars = {}
 			recordings.forEach((recording) => {
 				const key = String(recording.NDINum)
 				const name = recording.name || recording.label || `NDI ${key}`
+				console.log(`[NDI-REFRESH] Feed ${key}: isActive=${recording.isActive}`)
 				if (!this.states.NDIRecordings[key]) this.states.NDIRecordings[key] = {}
 				this.states.NDIRecordings[key].active = !!(recording.isActive)
 				this.states.NDIRecordings[key].name = name
@@ -1791,13 +1847,12 @@ class CRE8Instance extends InstanceBase {
 
 			const nameVars = {}
 			recordings.forEach((recording) => {
-				const num = recording.ISONum
-				const name = recording.name || recording.label || `ISO ${num}`
-				const label = `${num} – ${name}`
-				this.ISO_recordingList.push({ id: String(num), label })
-				this.states.ISORecordings[String(num)] = { active: !!(recording.isActive), name }
-				nameVars[`iso_feed_${num}_name`] = name
-				nameVars[`iso_feed_${num}_active`] = !!(recording.isActive)
+				const key = String(recording.ISONum)
+				const name = recording.name || recording.label || `ISO ${key}`
+				this.ISO_recordingList.push({ id: key, label: `${key} \u2013 ${name}` })
+				this.states.ISORecordings[key] = { active: !!(recording.isActive), name }
+				nameVars[`iso_feed_${key}_name`] = name
+				nameVars[`iso_feed_${key}_active`] = !!(recording.isActive)
 			})
 			if (Object.keys(nameVars).length > 0) this.setVariableValues(nameVars)
 		} catch (error) {
@@ -1830,6 +1885,7 @@ class CRE8Instance extends InstanceBase {
 		}
 	}
 
+	// MARK: Stats
 	getStats() {
 		this.cre8
 			.call('GetStats')
@@ -1867,7 +1923,7 @@ class CRE8Instance extends InstanceBase {
 
 	async getVideoSettings() {
 		let videoSettings = await this.sendRequest('GetVideoSettings')
-
+		
 		if (videoSettings) {
 			this.states.resolution = `${videoSettings.baseWidth}x${videoSettings.baseHeight}`
 			this.states.outputResolution = `${videoSettings.outputWidth}x${videoSettings.outputHeight}`
@@ -1879,7 +1935,8 @@ class CRE8Instance extends InstanceBase {
 			})
 		}
 	}
-
+	
+	// MARK: Outputs/Streams/Recs
 	//Outputs, Streams, Recordings
 	async getStreamStatus() {
 		let streamStatus = await this.sendRequest('GetStreamStatus')
@@ -1950,7 +2007,7 @@ class CRE8Instance extends InstanceBase {
 		}
 	}
 
-	//Scene Collection Specific Info
+	// MARK: Scene Collect/build
 	async buildSceneList() {
 		this.scenes = []
 		this.sceneChoices = []
@@ -2000,6 +2057,7 @@ class CRE8Instance extends InstanceBase {
 		}
 	}
 
+	// MARK: Scene Item Builds
 	async buildSourceList(sceneName) {
 		let data = await this.sendRequest('GetSceneItemList', { sceneName: sceneName })
 

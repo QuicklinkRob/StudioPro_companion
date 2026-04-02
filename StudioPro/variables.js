@@ -162,6 +162,7 @@ export function getVariables() {
 		media_tab_3_source: '',
 		media_tab_4_source: '',
 		media_tab_5_source: '',
+		
 	})
 
 	//Source Specific Variables
