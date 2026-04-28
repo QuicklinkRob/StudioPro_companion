@@ -3507,7 +3507,7 @@ export function getActions() {
 			
 			// update vcamSceneList from response if available, with fallback to sceneChoices
 			if (response?.sceneList && response.sceneList.length > 0) {
-				this.vcamSceneList = response = await this.sendRequest('GetVcamAuxOptions', {})
+				this.vcamSceneList = response.sceneList.map(scene => ({ id: scene, label: scene }))
 				// Add Program as the first scene option
 				this.vcamSceneList.unshift({ id: 'Program', label: 'Program' })
 				// add None as the initial option
