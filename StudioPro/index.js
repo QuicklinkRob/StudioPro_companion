@@ -156,22 +156,9 @@ class CRE8Instance extends InstanceBase {
 		this.filterList?.sort((a, b) => a.id.localeCompare(b.id))
 		this.audioSourceList?.sort((a, b) => a.id.localeCompare(b.id))
 		
-		const validMediaPlayerIds = this.mediaSourceList?.map(source => source.id) || []
-		// this.log('debug', `Valid media player IDs for media tab sources: ${validMediaPlayerIds.join(', ')}`)
-		const filteredTab = {}
-		
-		for (let i = 1; i <= 5; i++) {
-			const currentSource = this.getVariableValue(`media_tab_${i}_source`)
-			if (currentSource && currentSource !== '' && !validMediaPlayerIds.includes(currentSource)) {
-				filteredTab[`media_tab_${i}_source`] = ''
-				// this.log('debug', `cleared invalid media player source "${currentSource}" from media tab ${i}`)
-			}
-		}
-		
-		if (Object.keys(filteredTab).length > 0) {
-			this.setVariableValues(filteredTab)
-		}
-		//Special Choices - Scenes
+		// Build mediaTabChoices directly from available VLC sources — source name is the stable ID.
+		// No slot-to-source mapping needed; selecting a tab IS selecting the source by name.
+		this.mediaTabChoices = (this.mediaSourceList ?? []).map(source => ({ id: source.id, label: source.label }))
 		this.sceneChoicesProgramPreview = [
 			{ id: 'Current Scene', label: 'Current Scene' },
 			{ id: 'Preview Scene', label: 'Preview Scene' },
@@ -207,22 +194,6 @@ class CRE8Instance extends InstanceBase {
 			this.vcamList.push({ id: String(i), label: nameVar && nameVar !== '' ? nameVar : `vCam ${i}` })
 		}
 
-		// Build media tab choices dynamically based on detected VLC media sources
-		this.mediaTabChoices = []
-		
-		if (this.mediaSourceList && this.mediaSourceList.length > 0) {
-			for (let i = 0; i < this.mediaSourceList.length; i++) {
-				const source = this.mediaSourceList[i]
-				this.mediaTabChoices.push({
-					id: String(i + 1),
-					label: `${source?.label || 'unnamed'}`
-				})
-			}
-			// this.log('debug', `Built ${this.mediaTabChoices.length} media tab choices from ${this.mediaSourceList.length} VLC media sources`)
-		} else {
-			this.mediaTabChoices.push({ id: '1', label: 'Media Tab 1 (no VLC sources detected)' })
-			// this.log('debug', 'No VLC media sources detected, using default media tab choice')
-		}
 	}
 
 	updateActionsFeedbacksVariables() {
@@ -2354,35 +2325,9 @@ class CRE8Instance extends InstanceBase {
 	}
 
 	updateMediaTabStatus(sourceName, mediaState) {
-		// Check which tab (if any) has this source assigned
-		for (let i = 1; i <= 5; i++) {
-			let tabSourceVar = `media_tab_${i}_source`
-			let assignedSource = this.getVariableValue(tabSourceVar)
-			
-			if (assignedSource === sourceName) {
-				// Update tab status based on media state
-				let tabStatus = 'Stopped'
-				switch (mediaState) {
-					case 'CRE8_MEDIA_STATE_PLAYING':
-						tabStatus = 'Playing'
-						break
-					case 'CRE8_MEDIA_STATE_PAUSED':
-						tabStatus = 'Paused'
-						break
-					default:
-						tabStatus = 'Stopped'
-						break
-				}
-				
-				this.setVariableValues({
-					[`media_tab_${i}_status`]: tabStatus
-				})
-				
-				// Check feedbacks for this specific tab and active tab
-				this.checkFeedbacks('media_tab_playing', 'media_tab_status', 'active_media_tab_playing')
-				break // Source can only be assigned to one tab
-			}
-		}
+		// mediaSources[sourceName].mediaState is already updated by the caller.
+		// Just trigger feedbacks so all tab-aware feedbacks re-evaluate.
+		this.checkFeedbacks('media_tab_playing', 'media_tab_status', 'active_media_tab_playing')
 	}
 
 	buildInputSettings(sourceName, inputKind, inputSettings) {

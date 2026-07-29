@@ -154,14 +154,14 @@ export function getVariables() {
 		custom_scene_name: '',
 		dsk_display: '',
 		active_dsk_tab: '1', // Default to tab 1
-		active_media_tab: '1', // Default to media tab 1
+		active_media_tab: this.getVariableValue('active_media_tab') || '', // No tab active until clicked
 		current_media_button_text: 'Play', // Default to Play
 		active_mix: 'PROGRAM', // Default until server responds
-		media_tab_1_source: '',
-		media_tab_2_source: '',
-		media_tab_3_source: '',
-		media_tab_4_source: '',
-		media_tab_5_source: '',
+		media_tab_1_source: this.getVariableValue('media_tab_1_source') || '',
+		media_tab_2_source: this.getVariableValue('media_tab_2_source') || '',
+		media_tab_3_source: this.getVariableValue('media_tab_3_source') || '',
+		media_tab_4_source: this.getVariableValue('media_tab_4_source') || '',
+		media_tab_5_source: this.getVariableValue('media_tab_5_source') || '',
 		
 	})
 

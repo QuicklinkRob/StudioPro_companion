@@ -1771,8 +1771,8 @@ export function getActions() {
 			// determine media source
 			let media = action.options.source === 'currentMedia' ? this.states.currentMedia : action.options.source
 			if (!media && action.options.source === 'currentMedia') {
-				const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
-				media = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+				// active_media_tab now stores the source name directly
+				media = this.getVariableValue('active_media_tab') || ''
 			}
 			
 			if (!media) {
@@ -1865,8 +1865,8 @@ export function getActions() {
 		callback: async (action) => {
 			let media = action.options.source === 'currentMedia' ? this.states.currentMedia : action.options.source
 			if (!media && action.options.source === 'currentMedia') {
-				const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
-				media = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+				// active_media_tab now stores the source name directly
+				media = this.getVariableValue('active_media_tab') || ''
 			}
 			
 			if (!media) {
@@ -1951,89 +1951,32 @@ export function getActions() {
 	// MARK: Media Tabs
 	actions['select_media_tab'] = {
 		name: 'Select Media Tab',
-		description: 'Switch to a specific media tab for control',
+		description: 'Switch to a specific media tab by source name (stable across reloads)',
 		options: [
 			{
 				type: 'dropdown',
-				label: 'Media Tab',
+				label: 'Media Source',
 				id: 'mediaTab',
-				default: '1',
-				choices: [
-					// {
-					// 	type: 'dropdown',
-					// 	label: 'Media Tab',
-					// 	id: 'mediaTab',
-					// 	default: this.mediaTabChoices?.[0] ? this.mediaTabChoices[0].id : '1',
-					// 	choices: this.mediaTabChoices,
-					// },
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					// { id: '5', label: 'Media Tab 5' },
-				],
+				default: this.mediaTabChoices?.[0]?.id ?? '',
+				choices: this.mediaTabChoices,
 			},
 		],
 		callback: async (action) => {
-			// set the active media tab
-			this.log('debug', `selecting media tab ${action.options.mediaTab} as active from ${this.mediaTabChoices}`)
-			this.setVariableValues({
-				active_media_tab: action.options.mediaTab
-			})
+			const sourceName = action.options.mediaTab
+			if (!sourceName) return
 
-			this.log('debug', `selected media tab ${action.options.mediaTab} as active`)
+			this.setVariableValues({ active_media_tab: sourceName })
 
-			// Trigger feedback updates for tab selection
-			this.checkFeedbacks()
-
-			// log media tab selection and check if source is configured
-			const mediaSourceName = this.getVariableValue(`media_tab_${action.options.mediaTab}_source`)
-			this.log('debug', `active media tab ${action.options.mediaTab} - source: ${mediaSourceName || 'not configured'}`)
-			
-			// show available media sources for configuration if none is configured
-			if (!mediaSourceName) {
-				const availableMediaSources = this.mediaSourceList?.map(source => source.id) || []
-				this.log('info', `available media sources for configuration: [${availableMediaSources.join(', ') || 'none detected'}]`)
-				this.log('info', `to configure this tab, use the "configure media tab source" action and select from available sources`)
-				
-				// also log all current tab configurations for reference
-				const tabConfigs = []
-				for (let i = 1; i <= 5; i++) {
-					const source = this.getVariableValue(`media_tab_${i}_source`) || 'not configured'
-					tabConfigs.push(`tab ${i}: ${source}`)
-				}
-				this.log('debug', `current tab configurations: ${tabConfigs.join(', ')}`)
-			} else {
-				// check media status for the selected tab and update loop state variables
-				try {
-					const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: mediaSourceName })
-					this.log('debug', `getmediaplayerinputstatus for selected tab ${action.options.mediaTab} (${mediaSourceName}):`, JSON.stringify(mediaStatus, null, 2))
-					
-					// update loop state variables with current values from API
-					const validName = this.sources[mediaSourceName]?.validName ?? mediaSourceName
-					const trackLoopState = mediaStatus.mediaLoop || false
-					const playlistLoopState = mediaStatus.mediaPlaylistLoop || false
-					
-					this.setVariableValues({
-						[`media_loop_state_${validName}`]: trackLoopState ? 'true' : 'false',
-						[`media_playlist_loop_state_${validName}`]: playlistLoopState ? 'true' : 'false'
-					})
-					
-					// update media state for play/pause feedback
-					if (!this.mediaSources[mediaSourceName]) {
-						this.mediaSources[mediaSourceName] = {}
-					}
-					this.mediaSources[mediaSourceName].mediaState = mediaStatus.mediaState || 'CRE8_MEDIA_STATE_STOPPED'
-					
-					this.log('debug', `updated variables for ${mediaSourceName}: track=${trackLoopState}, playlist=${playlistLoopState}, state=${mediaStatus.mediaState}`)
-					
-					// trigger feedback updates after updating variables
-					this.checkFeedbacks()
-					
-				} catch (error) {
-					this.log('warn', `failed to get media status for selected tab ${action.options.mediaTab} (${mediaSourceName}): ${error.message}`)
-				}
+			try {
+				await this.sendRequest('TriggerMediaInputAction', {
+					inputName: sourceName,
+					mediaAction: 'CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_SELECT_TAB',
+				})
+			} catch (error) {
+				this.log('warn', `failed to select media tab in StudioPro: ${error.message}`)
 			}
+
+			this.checkFeedbacks()
 		},
 	}
 
@@ -2046,33 +1989,21 @@ export function getActions() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: 'current',
-				choices: [
-					{ id: 'current', label: '<CURRENT TAB>' },
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: [{ id: 'current', label: '<CURRENT TAB>' }, ...this.mediaTabChoices],
 			},
 		],
 		callback: async (action) => {
-			// get the target tab
-			const targetTab = action.options.mediaTab === 'current' ? 
-				this.getVariableValue('active_media_tab') || '1' : 
-				action.options.mediaTab
+			// source name is the stable ID; 'current' resolves to active_media_tab
+			const mediaSourceName = action.options.mediaTab === 'current'
+				? this.getVariableValue('active_media_tab') || ''
+				: action.options.mediaTab
 
-			this.log('debug', `media tab action requested for tab: ${action.options.mediaTab}, resolved to: ${targetTab}`)
-
-			// get the media source for this tab
-			const mediaSourceName = this.getVariableValue(`media_tab_${targetTab}_source`)
 			if (!mediaSourceName) {
-				this.log('warn', `no media source configured for media tab ${targetTab}`)
+				this.log('warn', 'media tab play/pause: no active media tab')
 				return
 			}
 
-			// log and check media status before triggering action
-			this.log('debug', `media tab ${targetTab} play/pause - checking status for source: ${mediaSourceName}`)
+			this.log('debug', `media tab play/pause - source: ${mediaSourceName}`)
 			
 			let mediaStatus = null
 			try {
@@ -2103,7 +2034,7 @@ export function getActions() {
 				newState = 'CRE8_MEDIA_STATE_PLAYING'
 			}
 			
-			this.log('debug', `media tab ${targetTab} - sending action ${playPause} to ${mediaSourceName}`)
+			this.log('debug', `media tab play/pause - sending ${playPause} to ${mediaSourceName}`)
 			
 			try {
 				this.log('debug', `attempting triggermediainputaction for ${mediaSourceName}`)
@@ -2136,36 +2067,20 @@ export function getActions() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: 'current',
-				choices: [
-					{ id: 'current', label: '<CURRENT TAB>' },
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: [{ id: 'current', label: '<CURRENT TAB>' }, ...this.mediaTabChoices],
 			},
 		],
 		callback: async (action) => {
-			const targetTab = action.options.mediaTab === 'current' ? 
-				this.getVariableValue('active_media_tab') || '1' : 
-				action.options.mediaTab
+			const mediaSourceName = action.options.mediaTab === 'current'
+				? this.getVariableValue('active_media_tab') || ''
+				: action.options.mediaTab
 
-			const mediaSourceName = this.getVariableValue(`media_tab_${targetTab}_source`)
 			if (!mediaSourceName) {
-				this.log('warn', `No media source configured for Media Tab ${targetTab}`)
+				this.log('warn', 'media tab stop: no active media tab')
 				return
 			}
 
-			// log and check media status before triggering action
-			this.log('debug', `media tab ${targetTab} stop - checking status for source: ${mediaSourceName}`)
-			
-			try {
-				const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: mediaSourceName })
-				this.log('debug', `getmediaplayerinputstatus response for ${mediaSourceName}:`, JSON.stringify(mediaStatus, null, 2))
-			} catch (error) {
-				this.log('warn', `failed to get media status for ${mediaSourceName}: ${error.message}`)
-			}
+			this.log('debug', `media tab stop - source: ${mediaSourceName}`)
 
 			// Flash feedback
 			this.states.mediaTabStopFlash = true
@@ -2174,8 +2089,6 @@ export function getActions() {
 				this.states.mediaTabStopFlash = false
 				this.checkFeedbacks('media_tab_stop_flash')
 			}, 200)
-
-			this.log('debug', `media tab ${targetTab} - sending stop action to ${mediaSourceName}`)
 
 			// note: triggermediaplayerinputaction not implemented in this cre8 version
 			try {
@@ -2209,36 +2122,20 @@ export function getActions() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: 'current',
-				choices: [
-					{ id: 'current', label: '<CURRENT TAB>' },
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: [{ id: 'current', label: '<CURRENT TAB>' }, ...this.mediaTabChoices],
 			},
 		],
 		callback: async (action) => {
-			const targetTab = action.options.mediaTab === 'current' ? 
-				this.getVariableValue('active_media_tab') || '1' : 
-				action.options.mediaTab
+			const mediaSourceName = action.options.mediaTab === 'current'
+				? this.getVariableValue('active_media_tab') || ''
+				: action.options.mediaTab
 
-			const mediaSourceName = this.getVariableValue(`media_tab_${targetTab}_source`)
 			if (!mediaSourceName) {
-				this.log('warn', `No media source configured for Media Tab ${targetTab}`)
+				this.log('warn', 'media tab next: no active media tab')
 				return
 			}
 
-			// log and check media status before triggering action
-			this.log('debug', `media tab ${targetTab} next - checking status for source: ${mediaSourceName}`)
-			
-			try {
-				const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: mediaSourceName })
-				this.log('debug', `getmediaplayerinputstatus response for ${mediaSourceName}:`, JSON.stringify(mediaStatus, null, 2))
-			} catch (error) {
-				this.log('warn', `failed to get media status for ${mediaSourceName}: ${error.message}`)
-			}
+			this.log('debug', `media tab next - source: ${mediaSourceName}`)
 
 			// Flash feedback
 			this.states.mediaTabNextFlash = true
@@ -2247,8 +2144,6 @@ export function getActions() {
 				this.states.mediaTabNextFlash = false
 				this.checkFeedbacks('media_tab_next_flash')
 			}, 200)
-
-			this.log('debug', `media tab ${targetTab} - sending next action to ${mediaSourceName}`)
 
 			// note: triggermediaplayerinputaction not implemented in this cre8 version
 			try {
@@ -2276,36 +2171,20 @@ export function getActions() {
 				label: 'Media Tab',
 				id: 'mediaTab',
 				default: 'current',
-				choices: [
-					{ id: 'current', label: '<CURRENT TAB>' },
-					{ id: '1', label: 'Media Tab 1' },
-					{ id: '2', label: 'Media Tab 2' },
-					{ id: '3', label: 'Media Tab 3' },
-					{ id: '4', label: 'Media Tab 4' },
-					{ id: '5', label: 'Media Tab 5' },
-				],
+				choices: [{ id: 'current', label: '<CURRENT TAB>' }, ...this.mediaTabChoices],
 			},
 		],
 		callback: async (action) => {
-			const targetTab = action.options.mediaTab === 'current' ? 
-				this.getVariableValue('active_media_tab') || '1' : 
-				action.options.mediaTab
+			const mediaSourceName = action.options.mediaTab === 'current'
+				? this.getVariableValue('active_media_tab') || ''
+				: action.options.mediaTab
 
-			const mediaSourceName = this.getVariableValue(`media_tab_${targetTab}_source`)
 			if (!mediaSourceName) {
-				this.log('warn', `No media source configured for Media Tab ${targetTab}`)
+				this.log('warn', 'media tab previous: no active media tab')
 				return
 			}
 
-			// log and check media status before triggering action
-			this.log('debug', `media tab ${targetTab} previous - checking status for source: ${mediaSourceName}`)
-			
-			try {
-				const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: mediaSourceName })
-				this.log('debug', `getmediaplayerinputstatus response for ${mediaSourceName}:`, JSON.stringify(mediaStatus, null, 2))
-			} catch (error) {
-				this.log('warn', `failed to get media status for ${mediaSourceName}: ${error.message}`)
-			}
+			this.log('debug', `media tab previous - source: ${mediaSourceName}`)
 
 			// Flash feedback
 			this.states.mediaTabPreviousFlash = true
@@ -2314,8 +2193,6 @@ export function getActions() {
 				this.states.mediaTabPreviousFlash = false
 				this.checkFeedbacks('media_tab_previous_flash')
 			}, 200)
-
-			this.log('debug', `media tab ${targetTab} - sending previous action to ${mediaSourceName}`)
 
 			// note: triggermediaplayerinputaction not implemented in this cre8 version
 			try {
@@ -2336,80 +2213,50 @@ export function getActions() {
 
 	actions['configure_media_tab'] = {
 		name: 'Configure Media Tab Source',
-		description: 'Assign a media player to a specific media tab',
+		description: 'Select and activate a media player tab by its source name. The source name is the stable identifier — unaffected by load order.',
 		options: [
 			{
 				type: 'dropdown',
-				label: 'Media Tab',
+				label: 'Media Source',
 				id: 'mediaTab',
-				default: '1',
+				default: this.mediaTabChoices?.[0]?.id ?? '',
 				choices: this.mediaTabChoices,
 			},
 		],
 		callback: async (action) => {
-			if (!action.options.mediaTab || action.options.mediaTab === '') {
-				this.log('warn', 'configure media tab: no media tab selected, action cancelled')
+			const sourceName = action.options.mediaTab
+			if (!sourceName) {
+				this.log('warn', 'configure media tab: no source selected, action cancelled')
 				return
 			}
-			
-			// configure which media source belongs to which tab
-			const tabNumber = action.options.mediaTab
-			const tabIndex = parseInt(tabNumber) - 1 
-			let sourceName = ''
-			
-			if (this.mediaSourceList && this.mediaSourceList[tabIndex]) {
-				sourceName = this.mediaSourceList[tabIndex].id
-				this.log('debug', `auto-assigned media source "${sourceName}" to media tab ${tabNumber} (index ${tabIndex})`)
-			} else {
-				sourceName = ''
-				this.log('debug', `no media source available at index ${tabIndex} for media tab ${tabNumber}`)
-			}
 
-			this.setVariableValues({
-				[`media_tab_${tabNumber}_source`]: sourceName,
-				// automatically set this as the active tab when configuring
-				active_media_tab: tabNumber
-			})
+			this.log('debug', `activating media tab: "${sourceName}"`)
 
-			this.log('info', `configured media tab ${tabNumber} to use source: ${sourceName}`)
-			this.log('debug', `set active media tab to: ${tabNumber}`)
-			
+			this.setVariableValues({ active_media_tab: sourceName })
 			this.checkFeedbacks()
-			
-			if (sourceName) {
-				try {
-					const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: sourceName })
-					this.log('debug', `getmediaplayerinputstatus for newly configured media tab ${tabNumber} (${sourceName}):`, JSON.stringify(mediaStatus, null, 2))
-					
-					// update when we get current values/data
-					const validName = this.sources[sourceName]?.validName ?? sourceName
-					const trackLoopState = mediaStatus.mediaLoop || false
-					const playlistLoopState = mediaStatus.mediaPlaylistLoop || false
-					
-					this.setVariableValues({
-						[`media_loop_state_${validName}`]: trackLoopState ? 'true' : 'false',
-						[`media_playlist_loop_state_${validName}`]: playlistLoopState ? 'true' : 'false'
-					})
-					
-					if (!this.mediaSources[sourceName]) {
-						this.mediaSources[sourceName] = {}
-					}
-					this.mediaSources[sourceName].mediaState = mediaStatus.mediaState || 'CRE8_MEDIA_STATE_STOPPED'
-					
-					this.log('debug', `updated variables for configured ${sourceName}: track=${trackLoopState}, playlist=${playlistLoopState}, state=${mediaStatus.mediaState}`)
-					
-					this.log('debug', `triggering select tab action for tab ${tabNumber} (${sourceName})`)
-					await this.sendRequest('TriggerMediaInputAction', { 
-						inputName: sourceName, 
-						mediaAction: 'CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_SELECT_TAB' 
-					})
-					this.log('info', `triggered select tab action for media tab ${tabNumber} (${sourceName}) using mediaAction: CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_SELECT_TAB`)
-					
-					this.checkFeedbacks()
-					
-				} catch (error) {
-					this.log('warn', `failed to get media status for newly configured media tab ${tabNumber} (${sourceName}): ${error.message}`)
-				}
+
+			try {
+				const mediaStatus = await this.sendRequest('GetMediaPlayerInputStatus', { inputName: sourceName })
+				this.log('debug', `media status for "${sourceName}":`, JSON.stringify(mediaStatus, null, 2))
+
+				const validName = this.sources[sourceName]?.validName ?? sourceName
+				this.setVariableValues({
+					[`media_loop_state_${validName}`]: (mediaStatus.mediaLoop || false) ? 'true' : 'false',
+					[`media_playlist_loop_state_${validName}`]: (mediaStatus.mediaPlaylistLoop || false) ? 'true' : 'false',
+				})
+
+				if (!this.mediaSources[sourceName]) this.mediaSources[sourceName] = {}
+				this.mediaSources[sourceName].mediaState = mediaStatus.mediaState || 'CRE8_MEDIA_STATE_STOPPED'
+
+				await this.sendRequest('TriggerMediaInputAction', {
+					inputName: sourceName,
+					mediaAction: 'CRE8_WEBSOCKET_MEDIA_INPUT_ACTION_SELECT_TAB',
+				})
+				this.log('info', `activated media tab: "${sourceName}"`)
+
+				this.checkFeedbacks()
+			} catch (error) {
+				this.log('warn', `configure media tab: failed for "${sourceName}": ${error.message}`)
 			}
 		},
 	}
@@ -3208,31 +3055,32 @@ export function getActions() {
 			this.states.isQuickCut = true;
 			this.checkFeedbacks('quick_cut_flash', 'transition_active', 'current_transition');
 			// Perform cut without changing the persistent transition setting
-			await this.sendBatch([
-				{
-					requestType: 'SetCurrentSceneTransition',
-					requestData: { transitionName: 'Cut' },
-				},
-				{
-					requestType: 'SetCurrentSceneTransitionDuration',
-					requestData: { transitionDuration: 50 },
-				},
-				{
-					requestType: 'TriggerStudioModeTransition',
-				},
-				{
-					requestType: 'Sleep',
-					requestData: { sleepMillis: 100 }, 
-				},
-				{
-					requestType: 'SetCurrentSceneTransition',
-					requestData: { transitionName: originalTransition },
-				},
-				{
-					requestType: 'SetCurrentSceneTransitionDuration',
-					requestData: { transitionDuration: Math.max(originalDuration, 50) },
-				}
-			]);
+			// await this.sendBatch([
+			// 	{
+			// 		requestType: 'SetCurrentSceneTransition',
+			// 		requestData: { transitionName: 'Cut' },
+			// 	},
+			// 	{
+			// 		requestType: 'SetCurrentSceneTransitionDuration',
+			// 		requestData: { transitionDuration: 50 },
+			// 	},
+			// 	{
+			// 		requestType: 'TriggerStudioModeTransition',
+			// 	},
+			// 	{
+			// 		requestType: 'Sleep',
+			// 		requestData: { sleepMillis: 100 }, 
+			// 	},
+			// 	{
+			// 		requestType: 'SetCurrentSceneTransition',
+			// 		requestData: { transitionName: originalTransition },
+			// 	},
+			// 	{
+			// 		requestType: 'SetCurrentSceneTransitionDuration',
+			// 		requestData: { transitionDuration: Math.max(originalDuration, 50) },
+			// 	}
+			// ]);
+			await this.sendRequest('TriggerQuickCutTransition'); 
 			// Clear the quick cut flag and original transition after flash duration
 			setTimeout(() => {
 				this.states.isQuickCut = false;
@@ -3496,6 +3344,14 @@ export function getActions() {
 			},
 		],
 		callback: async (action) => {
+
+			// const now = Date.now()
+			// if (this.vcamAuxLastCall && now - this.vcamAuxLastCall < 3000) {
+			// 	this.log('debug', 'set_vcam_aux blocked: debounce active')
+			// 	return
+			// }
+			// this.vcamAuxLastCall = now
+
 			// Get vCam options from server
 			const response = await this.sendRequest('GetVcamAuxOptions', {})
 			

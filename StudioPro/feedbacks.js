@@ -307,7 +307,7 @@ export function getFeedbacks() {
 					return this.states.activeMix === mixId;
 				}
 
-				if (this.states.activeMix !== mixId) return false;
+				// if (this.states.activeMix !== mixId) return false;
 				const sceneInput = ((await context.parseVariablesInString(sceneOption)) || '').trim();
 				if (!sceneInput) return false;
 
@@ -1046,22 +1046,9 @@ export function getFeedbacks() {
 			},
 		],
 		callback: (feedback) => {
-			const activeMediaTab = this.getVariableValue('active_media_tab') || '1';
-			const isSelected = activeMediaTab === feedback.options.mediaTab;
-			
-			// Only show feedback if tab is selected AND has a media source assigned
-			const mediaSource = this.getVariableValue(`media_tab_${feedback.options.mediaTab}_source`);
-			const hasMediaSource = mediaSource && mediaSource !== '';
-			
-			// console.log('Media Tab feedback debug for tab:', feedback.options.mediaTab);
-			// console.log('  activeMediaTab:', activeMediaTab);
-			// console.log('  isSelected:', isSelected);
-			// console.log('  mediaSource:', mediaSource);
-			// console.log('  hasMediaSource:', hasMediaSource);
-			// console.log('  result:', isSelected && hasMediaSource);
-			
-			// Temporarily return just selection to test
-			return isSelected; // Remove media source requirement for testing
+			const activeMediaTab = this.getVariableValue('active_media_tab') || '';
+			// active_media_tab now stores source name directly — just compare
+			return activeMediaTab === feedback.options.mediaTab;
 		},
 	}
 
@@ -1083,7 +1070,8 @@ export function getFeedbacks() {
 			},
 		],
 		callback: (feedback) => {
-			const mediaSourceName = this.getVariableValue(`media_tab_${feedback.options.mediaTab}_source`);
+			// dropdown ID is the source name directly
+			const mediaSourceName = feedback.options.mediaTab;
 			if (!mediaSourceName) return false;
 			
 			return this.mediaSources[mediaSourceName]?.mediaState == 'CRE8_MEDIA_STATE_PLAYING';
@@ -1100,8 +1088,8 @@ export function getFeedbacks() {
 		},
 		options: [],
 		callback: () => {
-			const activeTab = this.getVariableValue('active_media_tab') || '1';
-			const mediaSourceName = this.getVariableValue(`media_tab_${activeTab}_source`);
+			// active_media_tab stores source name directly
+			const mediaSourceName = this.getVariableValue('active_media_tab') || '';
 			if (!mediaSourceName) return false;
 			
 			return this.mediaSources[mediaSourceName]?.mediaState == 'CRE8_MEDIA_STATE_PLAYING';
@@ -1128,7 +1116,8 @@ export function getFeedbacks() {
 			},
 		],
 		callback: (feedback) => {
-			const mediaSourceName = this.getVariableValue(`media_tab_${feedback.options.mediaTab}_source`);
+			// dropdown ID is the source name directly
+			const mediaSourceName = feedback.options.mediaTab;
 			if (!mediaSourceName) return {};
 			
 			const mediaState = this.mediaSources[mediaSourceName]?.mediaState;
@@ -1160,8 +1149,8 @@ export function getFeedbacks() {
 			},
 		],
 		callback: (feedback) => {
-			const activeTab = this.getVariableValue('active_media_tab') || '1';
-			const mediaSourceName = this.getVariableValue(`media_tab_${activeTab}_source`);
+			// active_media_tab stores source name directly
+			const mediaSourceName = this.getVariableValue('active_media_tab') || '';
 			if (!mediaSourceName) return {};
 			
 			const mediaState = this.mediaSources[mediaSourceName]?.mediaState;
@@ -1195,8 +1184,9 @@ export function getFeedbacks() {
 		],
 		callback: (feedback) => {
 			const tabNumber = feedback.options.mediaTab;
-			const mediaSourceName = this.getVariableValue(`media_tab_${tabNumber}_source`);
-			const tabName = this.getVariableValue(`media_tab_${tabNumber}_name`) || `Tab ${tabNumber}`;
+			// dropdown ID is the source name directly
+			const mediaSourceName = tabNumber;
+			const tabName = mediaSourceName;
 			
 			if (!mediaSourceName) {
 				return { 
@@ -1838,8 +1828,8 @@ export function getFeedbacks() {
 		},
 		options: [],
 		callback: () => {
-			const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
-			const mediaSourceName = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+			// active_media_tab now stores the source name directly
+			const mediaSourceName = this.getVariableValue('active_media_tab') || ''
 			
 			if (!mediaSourceName) {
 				return false
@@ -1869,9 +1859,8 @@ export function getFeedbacks() {
 		},
 		options: [],
 		callback: () => {
-			// get the currently active media tab
-			const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
-			const mediaSourceName = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+			// active_media_tab now stores the source name directly
+			const mediaSourceName = this.getVariableValue('active_media_tab') || ''
 			
 			if (!mediaSourceName) {
 				return false
@@ -1901,8 +1890,8 @@ export function getFeedbacks() {
 		},
 		options: [],
 		callback: () => {
-			const activeMediaTab = this.getVariableValue('active_media_tab') || '1'
-			const mediaSourceName = this.getVariableValue(`media_tab_${activeMediaTab}_source`)
+			// active_media_tab now stores the source name directly
+			const mediaSourceName = this.getVariableValue('active_media_tab') || ''
 			
 			if (!mediaSourceName) {
 				return false
